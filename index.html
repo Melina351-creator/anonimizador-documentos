@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anonimizador de Documentos</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="8" fill="#1a56db"/>
+          <path d="M16 7L9 11V17C9 21.1 12.1 24.9 16 26C19.9 24.9 23 21.1 23 17V11L16 7Z" fill="white" opacity="0.9"/>
+          <path d="M13 16L15 18L19 14" stroke="#1a56db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Anonimizador de Documentos</span>
+      </div>
+      <div class="badge">100% Local &mdash; Sin conexión a servidores</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Step 1: Upload -->
+    <section id="step-upload" class="step active">
+      <div class="step-header">
+        <div class="step-number">1</div>
+        <h2>Cargar documento</h2>
+      </div>
+      <div id="drop-zone" class="drop-zone">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <polyline points="9 15 12 12 15 15"/>
+        </svg>
+        <p>Arrastra tu documento aquí o <label for="file-input" class="link">selecciona un archivo</label></p>
+        <p class="formats">Word (.docx) &bull; RTF &bull; PDF digital &bull; PDF escaneado</p>
+        <input type="file" id="file-input" accept=".docx,.rtf,.pdf" hidden>
+      </div>
+      <div id="file-info" class="file-info hidden">
+        <div class="file-icon" id="file-icon"></div>
+        <div class="file-details">
+          <span id="file-name"></span>
+          <span id="file-size"></span>
+        </div>
+        <button id="btn-remove-file" class="btn-icon" title="Quitar archivo">&#x2715;</button>
+      </div>
+    </section>
+
+    <!-- Step 2: Configure -->
+    <section id="step-config" class="step hidden">
+      <div class="step-header">
+        <div class="step-number">2</div>
+        <h2>Configurar anonimización</h2>
+      </div>
+      <div class="config-grid">
+        <div class="config-group">
+          <h3>Datos personales</h3>
+          <label class="toggle"><input type="checkbox" id="chk-names" checked><span class="slider"></span> Nombres y apellidos</label>
+          <label class="toggle"><input type="checkbox" id="chk-dni" checked><span class="slider"></span> DNI / NIE / NIF</label>
+          <label class="toggle"><input type="checkbox" id="chk-passport" checked><span class="slider"></span> Pasaporte</label>
+          <label class="toggle"><input type="checkbox" id="chk-phone" checked><span class="slider"></span> Teléfonos</label>
+          <label class="toggle"><input type="checkbox" id="chk-email" checked><span class="slider"></span> Correos electrónicos</label>
+          <label class="toggle"><input type="checkbox" id="chk-address" checked><span class="slider"></span> Direcciones y CP</label>
+          <label class="toggle"><input type="checkbox" id="chk-dates" checked><span class="slider"></span> Fechas de nacimiento</label>
+        </div>
+        <div class="config-group">
+          <h3>Datos financieros y legales</h3>
+          <label class="toggle"><input type="checkbox" id="chk-iban" checked><span class="slider"></span> IBAN / cuentas bancarias</label>
+          <label class="toggle"><input type="checkbox" id="chk-ss" checked><span class="slider"></span> Nº Seguridad Social</label>
+          <label class="toggle"><input type="checkbox" id="chk-plate" checked><span class="slider"></span> Matrículas de vehículos</label>
+          <label class="toggle"><input type="checkbox" id="chk-ip" checked><span class="slider"></span> Direcciones IP</label>
+          <label class="toggle"><input type="checkbox" id="chk-coords" checked><span class="slider"></span> Coordenadas GPS</label>
+        </div>
+        <div class="config-group">
+          <h3>Modo de reemplazo</h3>
+          <label class="radio-option">
+            <input type="radio" name="mode" value="label" checked>
+            <span>Etiqueta descriptiva <em>[NOMBRE]</em></span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="mode" value="redact">
+            <span>Tachado <em>████████</em></span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="mode" value="placeholder">
+            <span>Marcador genérico <em>[DATO PERSONAL]</em></span>
+          </label>
+          <div class="custom-terms-wrap">
+            <h3>Términos personalizados</h3>
+            <textarea id="custom-terms" placeholder="Un término por línea. Se eliminarán también del documento."></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: Preview & Process -->
+    <section id="step-preview" class="step hidden">
+      <div class="step-header">
+        <div class="step-number">3</div>
+        <h2>Revisar y procesar</h2>
+      </div>
+      <div id="processing-status" class="processing-status hidden">
+        <div class="spinner"></div>
+        <span id="processing-msg">Procesando documento...</span>
+      </div>
+      <div id="preview-container" class="preview-container hidden">
+        <div class="preview-pane">
+          <h4>Texto extraído</h4>
+          <div id="preview-original" class="preview-text"></div>
+        </div>
+        <div class="preview-pane">
+          <h4>Texto anonimizado</h4>
+          <div id="preview-anonymized" class="preview-text"></div>
+        </div>
+      </div>
+      <div id="stats-bar" class="stats-bar hidden">
+        <div class="stat"><span id="stat-total">0</span> datos detectados</div>
+        <div class="stat-breakdown" id="stat-breakdown"></div>
+      </div>
+    </section>
+
+    <!-- Step 4: Download -->
+    <section id="step-download" class="step hidden">
+      <div class="step-header">
+        <div class="step-number">4</div>
+        <h2>Descargar documento anonimizado</h2>
+      </div>
+      <div class="download-options">
+        <button id="btn-download-txt" class="btn-download">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Descargar como TXT
+        </button>
+        <button id="btn-download-docx" class="btn-download">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Descargar como DOCX
+        </button>
+        <button id="btn-download-pdf" class="btn-download">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h6M9 17h6M9 9h1"/></svg>
+          Descargar como PDF
+        </button>
+      </div>
+      <button id="btn-new" class="btn-secondary">Procesar otro documento</button>
+    </section>
+
+    <!-- Navigation -->
+    <div class="nav-bar">
+      <button id="btn-back" class="btn-secondary hidden">Atr&aacute;s</button>
+      <button id="btn-next" class="btn-primary" disabled>Siguiente</button>
+      <button id="btn-process" class="btn-primary hidden">Procesar documento</button>
+    </div>
+  </main>
+
+  <footer>
+    <p>Todo el procesamiento ocurre en tu navegador. Ning&uacute;n dato sale de tu ordenador.</p>
+  </footer>
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="js/anonymizer.js"></script>
+  <script src="js/extractors.js"></script>
+  <script src="js/exporters.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
