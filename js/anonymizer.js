@@ -127,4 +127,37 @@ function anonymizeText(text, options = {}) {
   return { result, stats, total };
 }
 
-window.Anonymizer = { anonymizeText, PATTERNS };
+/**
+ * Find PII match positions (start/end indices) in a text string without replacing.
+ * Used by the PDF redaction engine to locate text items to cover.
+ * @returns {Array<{start: number, end: number, label: string}>}
+ */
+function findMatchPositions(text, options = {}) {
+  const { enabled = {}, custom = [] } = options;
+  const matches = [];
+
+  for (const [key, { label, re }] of Object.entries(PATTERNS)) {
+    if (enabled[key] === false) continue;
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      matches.push({ start: m.index, end: m.index + m[0].length, label });
+    }
+    re.lastIndex = 0;
+  }
+
+  for (const term of custom) {
+    const t = term.trim();
+    if (!t) continue;
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const termRe = new RegExp(escaped, 'gi');
+    let m;
+    while ((m = termRe.exec(text)) !== null) {
+      matches.push({ start: m.index, end: m.index + m[0].length, label: 'Personalizado' });
+    }
+  }
+
+  return matches;
+}
+
+window.Anonymizer = { anonymizeText, findMatchPositions, PATTERNS };

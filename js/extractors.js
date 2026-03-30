@@ -128,12 +128,14 @@ async function extractText(file, onProgress = () => {}) {
 
   if (ext === 'docx') {
     onProgress('Extrayendo texto del documento Word…');
-    return extractDocx(file);
+    const text = await extractDocx(file);
+    return { text, isPdf: false, isDigitalPdf: false };
   }
 
   if (ext === 'rtf') {
     onProgress('Extrayendo texto RTF…');
-    return extractRtf(file);
+    const text = await extractRtf(file);
+    return { text, isPdf: false, isDigitalPdf: false };
   }
 
   if (ext === 'pdf') {
@@ -142,11 +144,12 @@ async function extractText(file, onProgress = () => {}) {
 
     if (isScanned) {
       onProgress(`PDF escaneado detectado (${numPages} páginas). Iniciando OCR…`);
-      return extractPdfOcr(file, onProgress);
+      const ocrText = await extractPdfOcr(file, onProgress);
+      return { text: ocrText, isPdf: true, isDigitalPdf: false };
     }
 
     onProgress('PDF digital procesado.');
-    return text;
+    return { text, isPdf: true, isDigitalPdf: true };
   }
 
   throw new Error(`Formato no soportado: .${ext}`);
