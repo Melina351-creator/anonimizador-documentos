@@ -75,7 +75,7 @@ const PATTERNS = {
     label: 'Fecha nacimiento',
     // Bug fix: added \. so dates with dots (15.03.1990) are also matched.
     // Also expanded keyword variants: f.nac, fec.nac, fecha nac.
-    re: /\b(?:nacid[ao]|fecha\s+de\s+nacimiento|fecha\s+nac\.?|fec\.?\s*nac\.?|f\.?\s*nac\.?)[:\s]+\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{2,4}\b|\b\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{4}\b/gi,
+    re: /\b(?:nacid[ao]|fecha\s+de\s+nacimiento|fecha\s+nac\.?|fec\.?\s*nac\.?|f\.?\s*nac\.?)[:\s]+\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{2,4}\b|\b\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{4}\b|\b(?:19|20)\d{2}[\-\/\.]\d{1,2}[\-\/\.]\d{1,2}\b/gi,
   },
   receta: {
     label: 'Nº Receta',
