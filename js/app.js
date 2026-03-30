@@ -7,12 +7,13 @@
   'use strict';
 
   // ── State ──────────────────────────────────────────────────────────
-  let currentFile      = null;
-  let extractedText    = '';
-  let anonymizedText   = '';
-  let currentStep      = 1;
-  let sourceIsPdf      = false;   // original file is a PDF
-  let sourceIsDigitalPdf = false; // PDF has a selectable text layer (not scanned)
+  let currentFile        = null;
+  let extractedText      = '';
+  let anonymizedText     = '';
+  let currentStep        = 1;
+  let sourceIsPdf        = false;   // original file is a PDF
+  let sourceIsDigitalPdf = false;   // PDF has a selectable text layer (not scanned)
+  let processingComplete = false;   // true after processing finishes; gates btn-confirm
 
   // ── Element shortcuts ──────────────────────────────────────────────
   const $ = id => document.getElementById(id);
@@ -27,6 +28,7 @@
   const btnNext    = $('btn-next');
   const btnBack    = $('btn-back');
   const btnProcess = $('btn-process');
+  const btnConfirm = $('btn-confirm');
   const btnNew     = $('btn-new');
 
   // ── File type helpers ──────────────────────────────────────────────
@@ -50,8 +52,17 @@
 
     btnBack.classList.toggle('hidden', n === 1 || n === 4);
     btnNext.classList.toggle('hidden', n >= 3);
-    btnProcess.classList.toggle('hidden', n !== 3);
     btnNext.disabled = (n === 1 && !currentFile);
+
+    // Step 3 nav: show either "Procesar" or "Confirmar" depending on processing state
+    if (n === 3) {
+      const done = processingComplete;
+      btnProcess.classList.toggle('hidden', done);
+      btnConfirm.classList.toggle('hidden', !done);
+    } else {
+      btnProcess.classList.add('hidden');
+      btnConfirm.classList.add('hidden');
+    }
   }
 
   btnNext.addEventListener('click', () => showStep(currentStep + 1));
@@ -63,17 +74,21 @@
     anonymizedText     = '';
     sourceIsPdf        = false;
     sourceIsDigitalPdf = false;
+    processingComplete = false;
     $('file-input').value = '';
     $('file-info').classList.add('hidden');
     $('drop-zone').classList.remove('hidden');
     $('preview-container').classList.add('hidden');
     $('processing-status').classList.add('hidden');
     $('stats-bar').classList.add('hidden');
+    $('confirm-banner').classList.add('hidden');
     $('preview-original').textContent   = '';
     $('preview-anonymized').textContent = '';
-    btnProcess.disabled = false;  // Bug 3: reset so the button works on the next file
+    btnProcess.disabled = false;
     showStep(1);
   });
+
+  btnConfirm.addEventListener('click', () => showStep(4));
 
   // ── File input ─────────────────────────────────────────────────────
   function handleFile(file) {
@@ -134,20 +149,26 @@
     const custom = customRaw.split('\n').map(s => s.trim()).filter(Boolean);
 
     const enabled = {
-      names:    $('chk-names').checked,
-      dni:      $('chk-dni').checked,
-      nif:      $('chk-dni').checked,       // bundled with DNI toggle
-      passport: $('chk-passport').checked,
-      phone:    $('chk-phone').checked,
-      email:    $('chk-email').checked,
-      address:  $('chk-address').checked,
-      postcode: $('chk-address').checked,   // bundled
-      birthdate:$('chk-dates').checked,
-      iban:     $('chk-iban').checked,
-      ss:       $('chk-ss').checked,
-      plate:    $('chk-plate').checked,
-      ip:       $('chk-ip').checked,
-      coords:   $('chk-coords').checked,
+      // Name detection – all sub-patterns controlled by the same toggle
+      names:          $('chk-names').checked,
+      namesCtx:       $('chk-names').checked,  // after "Paciente:", "Nombre:", etc.
+      namesTitleCase: $('chk-names').checked,  // "Leonardo Frey Frey"
+      namesAllCaps:   $('chk-names').checked,  // "FREY FREY LEONARDO"
+      // Document ID detection
+      dni:            $('chk-dni').checked,
+      dniAR:          $('chk-dni').checked,    // Argentine DNI (8 digits, dotted, keyword)
+      nif:            $('chk-dni').checked,    // CIF/NIF
+      passport:       $('chk-passport').checked,
+      phone:          $('chk-phone').checked,
+      email:          $('chk-email').checked,
+      address:        $('chk-address').checked,
+      postcode:       $('chk-address').checked,
+      birthdate:      $('chk-dates').checked,
+      iban:           $('chk-iban').checked,
+      ss:             $('chk-ss').checked,
+      plate:          $('chk-plate').checked,
+      ip:             $('chk-ip').checked,
+      coords:         $('chk-coords').checked,
     };
 
     return { mode, custom, enabled };
@@ -235,9 +256,13 @@
       status.classList.add('hidden');
       preview.classList.remove('hidden');
       statsBar.classList.remove('hidden');
+      $('confirm-banner').classList.remove('hidden');
 
-      // Auto-advance to download
-      setTimeout(() => showStep(4), 400);
+      // Bug 3: stay on step 3 so the user can review the preview.
+      // Swap "Procesar" for the green "Confirmar y descargar" button.
+      processingComplete = true;
+      btnProcess.classList.add('hidden');
+      btnConfirm.classList.remove('hidden');
 
     } catch (err) {
       status.classList.add('hidden');

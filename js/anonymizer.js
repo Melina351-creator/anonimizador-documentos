@@ -6,8 +6,16 @@
 const PATTERNS = {
   dni: {
     label: 'DNI/NIE',
-    // DNI: 8 digits + letter  |  NIE: X/Y/Z + 7 digits + letter
+    // Spanish DNI: 8 digits + letter  |  Spanish NIE: X/Y/Z + 7 digits + letter
     re: /\b([0-9]{8}[A-TRWAGMYFPDXBNJZSQVHLCKE]|[XYZ][0-9]{7}[A-TRWAGMYFPDXBNJZSQVHLCKE])\b/gi,
+  },
+  dniAR: {
+    label: 'DNI',
+    // Argentine DNI – three formats:
+    //   1. Preceded by keyword: "DNI 30343469", "DNI: 30.343.469", "CUIL 20-30343469-5"
+    //   2. Dotted format: 30.343.469
+    //   3. Standalone 8-digit number (most Argentine DNIs are 7-8 digits)
+    re: /\b(?:D\.?N\.?I\.?|CUIL|CUIT)\s*[Nº°#:\-\s.]*\d[\d.\-\s]{4,10}\d\b|\b\d{2}\.\d{3}\.\d{3}\b|\b\d{8}\b/gi,
   },
   nif: {
     label: 'CIF/NIF',
@@ -65,8 +73,28 @@ const PATTERNS = {
   },
   names: {
     label: 'Nombre',
-    // Names following common titles in Spanish legal docs
-    re: /\b(?:D\.?|D[oañ]\.?|Don|Doña|Sr\.?|Sra\.?|Dr\.?|Dra\.?|Lic\.?|Excm[ao]\.?|Ilm[ao]\.?|Prof\.?)\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:\s+(?:de\s+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){0,3}/g,
+    // Names following formal titles (D., Sr., Dr., etc.)
+    re: /\b(?:D\.?|D[oañ]\.?|Don|Doña|Sr\.?a?\.?|Dr\.?a?\.?|Lic\.?|Excm[ao]\.?|Ilm[ao]\.?|Prof\.?)\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:\s+(?:de\s+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){0,3}/g,
+  },
+  namesCtx: {
+    label: 'Nombre',
+    // Names after context labels common in medical and legal documents.
+    // Uses lookbehind so only the name is replaced, not the label itself.
+    // e.g.  "Paciente: Leonardo Frey Frey"  →  "Paciente: [NOMBRE]"
+    re: /(?<=\b(?:paciente|nombre\s+(?:y\s+)?apellido|apellido\s+(?:y\s+)?nombre|nombre\s+completo|apellido(?:s)?|nombre(?:s)?|titular|solicitante|requirente|interesado|firmante|beneficiario|compareciente|declarante|denunciante|imputado|acusado|causante|heredero|propietario|apoderado|asegurado|afiliado)\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){1,4}/gi,
+  },
+  namesTitleCase: {
+    label: 'Nombre',
+    // Three or four consecutive Title-Case words of name-appropriate length.
+    // Catches "Leonardo Frey Frey" and similar personal name sequences.
+    // May produce false positives on institutional phrases; user should review in preview.
+    re: /\b[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){2,3}\b/g,
+  },
+  namesAllCaps: {
+    label: 'Nombre',
+    // All-caps sequences of 3-4 words — common in Argentine medical records
+    // where patient names are written as "APELLIDO APELLIDO NOMBRE".
+    re: /\b[A-ZÁÉÍÓÚÜÑ]{3,20}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,20}){2,3}\b/g,
   },
 };
 
