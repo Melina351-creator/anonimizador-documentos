@@ -58,32 +58,93 @@ function downloadTxt(text, baseName) {
 }
 
 /**
- * Download as DOCX using the docx library.
+ * Download as DOCX.
+ * Built with JSZip + handcrafted Open XML — no dependency on the docx npm library,
+ * which was unreliable across CDN versions.
  */
 async function downloadDocx(text, baseName) {
-  const { Document, Packer, Paragraph, TextRun } = docx;
+  // Escape special XML characters so the document XML is always valid
+  function xe(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
 
+  // Build <w:p> elements — one paragraph per source line
   const lines = text.split('\n');
-  const paragraphs = lines.map(line => {
-    const trimmed = line.trim();
-    if (!trimmed) return new Paragraph({});
-    return new Paragraph({
-      children: [new TextRun({ text: trimmed, font: 'Calibri', size: 22 })],
-    });
-  });
+  const paragraphsXml = lines.map(line => {
+    if (!line.trim()) {
+      // Empty line → empty paragraph with zero spacing
+      return '<w:p><w:pPr><w:spacing w:after="0"/></w:pPr></w:p>';
+    }
+    // Split on tabs so they render as real Word tabs
+    const runs = line.split('\t').map((part, i) => {
+      let r = '';
+      if (i > 0) r += '<w:r><w:tab/></w:r>';
+      if (part) {
+        r += `<w:r><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>` +
+             `<w:t xml:space="preserve">${xe(part)}</w:t></w:r>`;
+      }
+      return r;
+    }).join('');
+    return `<w:p><w:pPr><w:spacing w:after="100"/></w:pPr>${runs}</w:p>`;
+  }).join('\n');
 
-  const notice = new Paragraph({
-    children: [new TextRun({
-      text: 'Documento anonimizado por Anonimizador de Documentos – procesado íntegramente en el navegador.',
-      color: '888888', italics: true, size: 18,
-    })],
-  });
+  const noticeXml =
+    `<w:p><w:r><w:rPr><w:color w:val="888888"/><w:i/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>` +
+    `<w:t>Documento anonimizado \u2013 procesado localmente en el navegador.</w:t></w:r></w:p>`;
 
-  const doc = new Document({
-    sections: [{ properties: {}, children: [notice, new Paragraph({}), ...paragraphs] }],
-  });
+  const documentXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+    `<w:document xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"\n` +
+    `  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"\n` +
+    `  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"\n` +
+    `  mc:Ignorable="">\n` +
+    `  <w:body>\n` +
+    `    ${noticeXml}\n<w:p/>\n` +
+    `    ${paragraphsXml}\n` +
+    `    <w:sectPr>\n` +
+    `      <w:pgSz w:w="11906" w:h="16838"/>\n` +          // A4
+    `      <w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1701"\n` +
+    `               w:header="709" w:footer="709" w:gutter="0"/>\n` +
+    `    </w:sectPr>\n` +
+    `  </w:body>\n` +
+    `</w:document>`;
 
-  const blob = await Packer.toBlob(doc);
+  const contentTypesXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n` +
+    `  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n` +
+    `  <Default Extension="xml"  ContentType="application/xml"/>\n` +
+    `  <Override PartName="/word/document.xml"\n` +
+    `    ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>\n` +
+    `</Types>`;
+
+  const relsXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n` +
+    `  <Relationship Id="rId1"\n` +
+    `    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"\n` +
+    `    Target="word/document.xml"/>\n` +
+    `</Relationships>`;
+
+  const docRelsXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml',        contentTypesXml);
+  zip.file('_rels/.rels',                relsXml);
+  zip.file('word/document.xml',          documentXml);
+  zip.file('word/_rels/document.xml.rels', docRelsXml);
+
+  const buffer = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
   triggerDownload(blob, `${baseName}_anonimizado.docx`);
 }
 
