@@ -149,15 +149,16 @@
     const custom = customRaw.split('\n').map(s => s.trim()).filter(Boolean);
 
     const enabled = {
-      // Name detection – all sub-patterns controlled by the same toggle
+      // Name detection – all sub-patterns share the same toggle
       names:          $('chk-names').checked,
-      namesCtx:       $('chk-names').checked,  // after "Paciente:", "Nombre:", etc.
-      namesTitleCase: $('chk-names').checked,  // "Leonardo Frey Frey"
-      namesAllCaps:   $('chk-names').checked,  // "FREY FREY LEONARDO"
+      namesCtx:       $('chk-names').checked,
+      namesTitleCase: $('chk-names').checked,
+      namesAllCaps:   $('chk-names').checked,
       // Document ID detection
       dni:            $('chk-dni').checked,
-      dniAR:          $('chk-dni').checked,    // Argentine DNI (8 digits, dotted, keyword)
-      nif:            $('chk-dni').checked,    // CIF/NIF
+      dniAR:          $('chk-dni').checked,
+      nif:            $('chk-dni').checked,
+      cuil:           $('chk-cuil').checked,
       passport:       $('chk-passport').checked,
       phone:          $('chk-phone').checked,
       email:          $('chk-email').checked,
@@ -169,6 +170,10 @@
       plate:          $('chk-plate').checked,
       ip:             $('chk-ip').checked,
       coords:         $('chk-coords').checked,
+      // Clinical data
+      receta:         $('chk-receta').checked,
+      sexo:           $('chk-sexo').checked,
+      matricula:      $('chk-matricula').checked,
     };
 
     return { mode, custom, enabled };
