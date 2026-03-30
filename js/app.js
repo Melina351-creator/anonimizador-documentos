@@ -7,10 +7,12 @@
   'use strict';
 
   // ── State ──────────────────────────────────────────────────────────
-  let currentFile  = null;
-  let extractedText = '';
-  let anonymizedText = '';
-  let currentStep  = 1;
+  let currentFile      = null;
+  let extractedText    = '';
+  let anonymizedText   = '';
+  let currentStep      = 1;
+  let sourceIsPdf      = false;   // original file is a PDF
+  let sourceIsDigitalPdf = false; // PDF has a selectable text layer (not scanned)
 
   // ── Element shortcuts ──────────────────────────────────────────────
   const $ = id => document.getElementById(id);
@@ -56,9 +58,11 @@
   btnBack.addEventListener('click', () => showStep(currentStep - 1));
 
   btnNew.addEventListener('click', () => {
-    currentFile    = null;
-    extractedText  = '';
-    anonymizedText = '';
+    currentFile        = null;
+    extractedText      = '';
+    anonymizedText     = '';
+    sourceIsPdf        = false;
+    sourceIsDigitalPdf = false;
     $('file-input').value = '';
     $('file-info').classList.add('hidden');
     $('drop-zone').classList.remove('hidden');
@@ -67,6 +71,7 @@
     $('stats-bar').classList.add('hidden');
     $('preview-original').textContent   = '';
     $('preview-anonymized').textContent = '';
+    btnProcess.disabled = false;  // Bug 3: reset so the button works on the next file
     showStep(1);
   });
 
@@ -112,6 +117,14 @@
     dropZone.classList.remove('dragover');
     handleFile(e.dataTransfer.files[0]);
   });
+
+  // Bug 1: the "selecciona un archivo" span handles its own click and stops propagation
+  // so the drop-zone click handler below doesn't also trigger (which would open the dialog twice).
+  $('select-link').addEventListener('click', e => {
+    e.stopPropagation();
+    $('file-input').click();
+  });
+  // Clicking anywhere else in the drop-zone (icon, formats text, empty area) opens the dialog once.
   dropZone.addEventListener('click', () => $('file-input').click());
 
   // ── Build options from UI ──────────────────────────────────────────
@@ -187,7 +200,10 @@
     try {
       // 1. Extract
       setMsg('Extrayendo texto del documento…');
-      extractedText = await Extractors.extractText(currentFile, setMsg);
+      const extracted = await Extractors.extractText(currentFile, setMsg);
+      extractedText      = extracted.text;
+      sourceIsPdf        = extracted.isPdf;
+      sourceIsDigitalPdf = extracted.isDigitalPdf;
 
       if (!extractedText.trim()) {
         throw new Error('No se pudo extraer texto del documento. Verifica que no esté protegido.');
@@ -241,8 +257,15 @@
   $('btn-download-docx').addEventListener('click',
     () => Exporters.downloadDocx(anonymizedText, baseName()));
 
-  $('btn-download-pdf').addEventListener('click',
-    () => Exporters.downloadPdf(anonymizedText, baseName()));
+  $('btn-download-pdf').addEventListener('click', () => {
+    if (sourceIsDigitalPdf) {
+      // Bug 2: redact in-place on the original PDF to preserve layout
+      Exporters.downloadPdfRedacted(currentFile, baseName(), getOptions());
+    } else {
+      // Non-PDF source (DOCX, RTF, OCR): generate text-based PDF
+      Exporters.downloadPdf(anonymizedText, baseName());
+    }
+  });
 
   // ── Init ──────────────────────────────────────────────────────────
   showStep(1);

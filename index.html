@@ -35,7 +35,7 @@
           <line x1="12" y1="18" x2="12" y2="12"/>
           <polyline points="9 15 12 12 15 15"/>
         </svg>
-        <p>Arrastra tu documento aquí o <label for="file-input" class="link">selecciona un archivo</label></p>
+        <p>Arrastra tu documento aquí o <span id="select-link" class="link">selecciona un archivo</span></p>
         <p class="formats">Word (.docx) &bull; RTF &bull; PDF digital &bull; PDF escaneado</p>
         <input type="file" id="file-input" accept=".docx,.rtf,.pdf" hidden>
       </div>
@@ -158,6 +158,7 @@
   </footer>
 
   <!-- Libraries -->
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
