@@ -19,6 +19,23 @@ const PATTERNS = {
     //   3. Plain 11 digits with valid CUIL prefix (20,23,24,27 / 30,33,34)
     re: /\b(?:CUIL|CUIT|C\.U\.I\.L\.?|C\.U\.I\.T\.?)\s*[:\-Nº°#\s]*\d{2}[\-\s]?\d{8}[\-\s]?\d\b|\b\d{2}[\-]\d{8}[\-]\d\b|\b(?:20|23|24|27|30|33|34)\d{9}\b/gi,
   },
+  // rut runs BEFORE dniAR: the dotted RUT format (12.345.678-9) starts with
+  // XX.XXX.XXX which would be consumed by dniAR's \d{2}\.\d{3}\.\d{3} pattern.
+  rut: {
+    label: 'RUT',
+    // Uruguayan RUT (Registro Único Tributario): 7-8 digit number + check digit
+    //   1. With keyword:           RUT: 12.345.678-9  |  RUT 12345678-9
+    //   2. Dotted standalone:      12.345.678-9  |  1.234.567-8
+    re: /\b(?:RUT|R\.U\.T\.?)\s*[:\-Nº°#]?\s*\d{1,2}\.?\d{3}\.?\d{3}[\-]\d\b|\b\d{1,2}\.\d{3}\.\d{3}[\-]\d\b/gi,
+  },
+  rfc: {
+    label: 'RFC',
+    // Mexican RFC (Registro Federal de Contribuyentes): 3-4 letters + 6-digit
+    // birthdate (YYMMDD) + 3 alphanumeric homoclave.  Total: 12-13 chars.
+    //   1. With keyword:   RFC: FMS100120RG8  |  RFC GOMA820420RU4
+    //   2. Standalone pattern (specific enough to avoid false positives)
+    re: /\b(?:RFC|R\.F\.C\.?)\s*[:\-Nº°#]?\s*[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b|\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/gi,
+  },
   dniAR: {
     label: 'DNI',
     // Argentine DNI – three formats (CUIL/CUIT already handled above):
@@ -51,9 +68,18 @@ const PATTERNS = {
     label: 'Email',
     re: /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g,
   },
+  // addressCtx detects the address VALUE after common field labels.
+  // Lookbehind preserves the label ("domicilio: [DIRECCIÓN]" not "[DIRECCIÓN]").
+  // This covers Argentine/LATAM formats without street-type keywords
+  // (e.g. "Domicilio: GUATEMALA 4242, 2B, CABA").
+  addressCtx: {
+    label: 'Dirección',
+    re: /(?<=\b(?:domicilio(?:\s+\w+)?|direcci[oó]n(?:\s+\w+)?|residencia|domiciliad[ao](?:\s+en)?)\s*[:\-]?\s*)[^\n;]{5,100}/gi,
+  },
   address: {
     label: 'Dirección',
-    re: /\b(?:calle|c\/|avda?\.?|avenida|plaza|pza\.?|paseo|pso\.?|camino|ronda|travesía|bulevar|pol[ií]gono|urb\.?|urbanización)\s+[^\n,;]{3,60}(?:,\s*n[oº°]?\s*\d+[^\n,;]{0,30})?/gi,
+    // Added: pasaje/pje, diagonal/diag, bv (boulevard) for wider coverage
+    re: /\b(?:calle|c\/|avda?\.?|avenida|plaza|pza\.?|paseo|pso\.?|camino|ronda|travesía|bulevar|bv\.?|pol[ií]gono|urb\.?|urbanización|pasaje|pje\.?|diagonal|diag\.?)\s+[^\n,;]{3,60}(?:,\s*n[oº°]?\s*\d+[^\n,;]{0,30})?/gi,
   },
   postcode: {
     label: 'Código Postal',
@@ -75,7 +101,7 @@ const PATTERNS = {
     label: 'Fecha nacimiento',
     // Bug fix: added \. so dates with dots (15.03.1990) are also matched.
     // Also expanded keyword variants: f.nac, fec.nac, fecha nac.
-    re: /\b(?:nacid[ao]|fecha\s+de\s+nacimiento|fecha\s+nac\.?|fec\.?\s*nac\.?|f\.?\s*nac\.?)[:\s]+\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{2,4}\b|\b\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{4}\b/gi,
+    re: /\b(?:nacid[ao]|fecha\s+de\s+nacimiento|fecha\s+nac\.?|fec\.?\s*nac\.?|f\.?\s*nac\.?)[:\s]+\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{2,4}\b|\b\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{4}\b|\b(?:19|20)\d{2}[\-\/\.]\d{1,2}[\-\/\.]\d{1,2}\b/gi,
   },
   receta: {
     label: 'Nº Receta',
@@ -154,7 +180,9 @@ function anonymizeText(text, options = {}) {
   for (const term of custom) {
     const t = term.trim();
     if (!t) continue;
-    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Normalize runs of spaces to \s+ so the term matches even when the
+    // extracted document has non-breaking spaces, double spaces, etc.
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const termRe = new RegExp(escaped, 'gi');
     const matches = result.match(termRe) || [];
     if (matches.length) {
@@ -189,7 +217,7 @@ function findMatchPositions(text, options = {}) {
   for (const term of custom) {
     const t = term.trim();
     if (!t) continue;
-    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const termRe = new RegExp(escaped, 'gi');
     let m;
     while ((m = termRe.exec(text)) !== null) {
