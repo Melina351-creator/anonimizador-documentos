@@ -38,8 +38,34 @@ function readAsText(file, encoding = 'utf-8') {
  */
 async function extractDocx(file) {
   const buffer = await readAsArrayBuffer(file);
-  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-  return result.value;
+
+  // Extract main body text with mammoth
+  const bodyResult = await mammoth.extractRawText({ arrayBuffer: buffer });
+  const bodyText   = bodyResult.value;
+
+  // Also extract text from DOCX header/footer XML via JSZip so that PII
+  // embedded in letterheads (names, company data) is also anonymized.
+  let headerFooterText = '';
+  try {
+    const zip = await JSZip.loadAsync(buffer.slice(0));
+    const hfTexts = [];
+    for (const [path, entry] of Object.entries(zip.files)) {
+      if (/^word\/(header|footer)\d*\.xml$/i.test(path)) {
+        const xml  = await entry.async('string');
+        // Pull text runs from <w:t> elements
+        const runs = Array.from(xml.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g), m => m[1]);
+        const text = runs.join(' ').trim();
+        if (text) hfTexts.push(text);
+      }
+    }
+    if (hfTexts.length) {
+      headerFooterText = '\n\n--- Encabezado / Pie de página ---\n' + hfTexts.join('\n');
+    }
+  } catch (_) {
+    // JSZip unavailable or ZIP parse failed – body-only extraction is fine
+  }
+
+  return bodyText + headerFooterText;
 }
 
 /**

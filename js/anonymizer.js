@@ -38,11 +38,12 @@ const PATTERNS = {
   },
   dniAR: {
     label: 'DNI',
-    // Argentine DNI – three formats (CUIL/CUIT already handled above):
+    // Argentine DNI – three formats (CUIL/CUIT/RUT already handled above):
     //   1. After DNI keyword: "DNI 30343469", "DNI: 30.343.469"
     //   2. Dotted format: 30.343.469
-    //   3. Standalone 8-digit number
-    re: /\bD\.?N\.?I\.?\s*[Nº°#:\s.]*\d[\d.\-\s]{4,10}\d\b|\b\d{2}\.\d{3}\.\d{3}\b|\b\d{8}\b/gi,
+    //   3. Context-aware: 7-8 digits after "N°", "número", "nro.", "documento"
+    //      (replaces the broad \b\d{8}\b that caused many false positives)
+    re: /\bD\.?N\.?I\.?\s*[Nº°#:\s.]*\d[\d.\-\s]{4,10}\d\b|\b\d{2}\.\d{3}\.\d{3}\b|(?<=\b(?:n[uú]mero|n[oº°]\.?|nro\.?|documento|doc\.)\s*[:\-]?\s*)\d{7,8}\b/gi,
   },
   nif: {
     label: 'CIF/NIF',
@@ -74,7 +75,7 @@ const PATTERNS = {
   // (e.g. "Domicilio: GUATEMALA 4242, 2B, CABA").
   addressCtx: {
     label: 'Dirección',
-    re: /(?<=\b(?:domicilio(?:\s+\w+)?|direcci[oó]n(?:\s+\w+)?|residencia|domiciliad[ao](?:\s+en)?)\s*[:\-]?\s*)[^\n;]{5,100}/gi,
+    re: /(?<=\b(?:domicilio(?:\s+\w+)?|direcci[oó]n(?:\s+\w+)?|residencia|domiciliad[ao](?:\s+en)?)\s*[:\-]?\s*)[^\n;]{3,50}(?:,\s*[^\n;,]{1,30}){0,2}/gi,
   },
   address: {
     label: 'Dirección',
@@ -225,7 +226,49 @@ function findMatchPositions(text, options = {}) {
     }
   }
 
-  return matches;
+  // Assign stable IDs so the UI can track individual matches for exclusion
+  return matches.map((m, i) => ({ ...m, id: i }));
 }
 
-window.Anonymizer = { anonymizeText, findMatchPositions, PATTERNS };
+/**
+ * Anonymize text using pre-computed match positions (from findMatchPositions),
+ * supporting exclusion of specific match IDs (manual review / false positive marking).
+ *
+ * @param {string} text
+ * @param {Array}  allMatches  – output of findMatchPositions (with .id fields)
+ * @param {Set}    excludedIds – Set of match .id values to skip
+ * @param {string} mode        – 'label' | 'redact' | 'placeholder'
+ * @returns {{ result: string, stats: object, total: number }}
+ */
+function anonymizeFromPositions(text, allMatches, excludedIds, mode = 'label') {
+  // Filter out matches the user has marked as false positives
+  const active = allMatches.filter(m => !excludedIds.has(m.id));
+
+  // Deduplicate overlapping positions — first match by start position wins
+  // (mirrors the sequential pattern execution order in anonymizeText)
+  const sorted = [...active].sort((a, b) => a.start - b.start);
+  const deduped = [];
+  let lastEnd = -1;
+  for (const m of sorted) {
+    if (m.start >= lastEnd) {
+      deduped.push(m);
+      lastEnd = m.end;
+    }
+  }
+
+  // Replace right-to-left so character positions of earlier matches stay valid
+  deduped.sort((a, b) => b.start - a.start);
+
+  const stats = {};
+  let result = text;
+  for (const { start, end, label } of deduped) {
+    const replacement = makeReplacement(mode, label);
+    result = result.slice(0, start) + replacement + result.slice(end);
+    stats[label] = (stats[label] || 0) + 1;
+  }
+
+  const total = Object.values(stats).reduce((a, b) => a + b, 0);
+  return { result, stats, total };
+}
+
+window.Anonymizer = { anonymizeText, anonymizeFromPositions, findMatchPositions, PATTERNS };

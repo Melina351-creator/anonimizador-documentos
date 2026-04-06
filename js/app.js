@@ -14,6 +14,8 @@
   let sourceIsPdf        = false;   // original file is a PDF
   let sourceIsDigitalPdf = false;   // PDF has a selectable text layer (not scanned)
   let processingComplete = false;   // true after processing finishes; gates btn-confirm
+  let allMatches         = [];      // match positions (with .id) from last findMatchPositions call
+  let excludedMatchIds   = new Set(); // match IDs marked as false positives by the user
 
   // ── Element shortcuts ──────────────────────────────────────────────
   const $ = id => document.getElementById(id);
@@ -84,6 +86,8 @@
     $('confirm-banner').classList.add('hidden');
     $('preview-original').textContent   = '';
     $('preview-anonymized').textContent = '';
+    allMatches       = [];
+    excludedMatchIds = new Set();
     btnProcess.disabled = false;
     showStep(1);
   });
@@ -179,7 +183,8 @@
       matricula:      $('chk-matricula').checked,
     };
 
-    return { mode, custom, enabled };
+    const redactImages = $('chk-redact-images')?.checked ?? false;
+    return { mode, custom, enabled, redactImages };
   }
 
   // ── Highlight helpers for preview ─────────────────────────────────
@@ -212,6 +217,48 @@
       .replace(/>/g, '&gt;');
   }
 
+  /**
+   * Render the original text with each detected PII item wrapped in a clickable
+   * <mark> so the user can toggle false-positive exclusions before confirming.
+   */
+  function renderClickableMatches(text, matches, excludedIds) {
+    // Deduplicate overlapping positions (first by start wins — same order as replacement)
+    const sorted = [...matches].sort((a, b) => a.start - b.start);
+    const deduped = [];
+    let lastEnd = -1;
+    for (const m of sorted) {
+      if (m.start >= lastEnd) { deduped.push(m); lastEnd = m.end; }
+    }
+
+    let html = '';
+    let pos  = 0;
+    for (const m of deduped) {
+      html += escapeHtml(text.slice(pos, m.start));
+      const ex  = excludedIds.has(m.id);
+      const cls = ex ? 'highlight-excluded' : 'highlight-found highlight-pii-click';
+      const tip = ex
+        ? `${m.label} — excluido (clic para volver a incluir)`
+        : `${m.label} — clic para marcar como falso positivo`;
+      html += `<mark class="${cls}" data-match-id="${m.id}" title="${escapeHtml(tip)}">${escapeHtml(text.slice(m.start, m.end))}</mark>`;
+      pos = m.end;
+    }
+    html += escapeHtml(text.slice(pos));
+    return html;
+  }
+
+  /** Update the stats bar with a stats object and total count. */
+  function renderStats(stats, total) {
+    $('stat-total').textContent = total;
+    const breakdown = $('stat-breakdown');
+    breakdown.innerHTML = '';
+    for (const [label, count] of Object.entries(stats)) {
+      const chip = document.createElement('span');
+      chip.className = 'stat-chip';
+      chip.innerHTML = `<strong>${count}</strong> ${label}`;
+      breakdown.appendChild(chip);
+    }
+  }
+
   // ── Process ────────────────────────────────────────────────────────
   btnProcess.addEventListener('click', async () => {
     const status = $('processing-status');
@@ -238,28 +285,25 @@
         throw new Error('No se pudo extraer texto del documento. Verifica que no esté protegido.');
       }
 
-      // 2. Anonymize
+      // 2. Detect PII positions (needed for interactive review + anonymization)
       setMsg('Detectando y anonimizando datos personales…');
       const options = getOptions();
-      const { result, stats, total } = Anonymizer.anonymizeText(extractedText, options);
+      allMatches = Anonymizer.findMatchPositions(extractedText, options)
+        .map((m, i) => ({ ...m, id: i }));
+      excludedMatchIds = new Set();
+      const { result, stats, total } = Anonymizer.anonymizeFromPositions(
+        extractedText, allMatches, excludedMatchIds, options.mode
+      );
       anonymizedText = result;
 
-      // 3. Preview
+      // 3. Preview – original panel shows clickable PII marks for manual review
       const origEl  = $('preview-original');
       const anonEl  = $('preview-anonymized');
-      origEl.innerHTML  = highlightOriginal(extractedText, options);
+      origEl.innerHTML  = renderClickableMatches(extractedText, allMatches, excludedMatchIds);
       anonEl.innerHTML  = highlightAnonymized(anonymizedText);
 
       // 4. Stats
-      $('stat-total').textContent = total;
-      const breakdown = $('stat-breakdown');
-      breakdown.innerHTML = '';
-      for (const [label, count] of Object.entries(stats)) {
-        const chip = document.createElement('span');
-        chip.className = 'stat-chip';
-        chip.innerHTML = `<strong>${count}</strong> ${label}`;
-        breakdown.appendChild(chip);
-      }
+      renderStats(stats, total);
 
       status.classList.add('hidden');
       preview.classList.remove('hidden');
@@ -277,6 +321,28 @@
       alert('Error al procesar el documento:\n' + err.message);
       btnProcess.disabled = false;
     }
+  });
+
+  // ── Manual review: toggle false positives by clicking highlighted PII ──────
+  $('preview-original').addEventListener('click', e => {
+    const mark = e.target.closest('[data-match-id]');
+    if (!mark) return;
+    const id = parseInt(mark.dataset.matchId, 10);
+    if (excludedMatchIds.has(id)) {
+      excludedMatchIds.delete(id);
+    } else {
+      excludedMatchIds.add(id);
+    }
+    // Re-render preview with updated exclusion state
+    const opts = getOptions();
+    $('preview-original').innerHTML = renderClickableMatches(extractedText, allMatches, excludedMatchIds);
+    // Re-anonymize and update right panel + stats
+    const { result, stats, total } = Anonymizer.anonymizeFromPositions(
+      extractedText, allMatches, excludedMatchIds, opts.mode
+    );
+    anonymizedText = result;
+    $('preview-anonymized').innerHTML = highlightAnonymized(anonymizedText);
+    renderStats(stats, total);
   });
 
   // ── Downloads ──────────────────────────────────────────────────────
