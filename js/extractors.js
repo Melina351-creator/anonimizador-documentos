@@ -34,6 +34,18 @@ function readAsText(file, encoding = 'utf-8') {
 }
 
 /**
+ * Read a File as a Data URL (for Tesseract OCR on images).
+ */
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = e => resolve(e.target.result);
+    reader.onerror = () => reject(new Error('Error al leer el archivo'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
  * Extract text from a DOCX file using mammoth.js.
  */
 async function extractDocx(file) {
@@ -74,21 +86,51 @@ async function extractDocx(file) {
 async function extractRtf(file) {
   const text = await readAsText(file, 'utf-8');
 
-  // Remove RTF header, control words, and groups
   let plain = text
-    .replace(/\{\\rtf[^}]*\}/g, '')                   // RTF header group
-    .replace(/\\([a-z]+)(-?\d+)?\*?/gi, ' ')           // control words
-    .replace(/\{[^}]*\}/g, ' ')                        // remaining groups
-    .replace(/\\\n/g, '\n')                            // line breaks
+    .replace(/\{\\rtf[^}]*\}/g, '')
+    .replace(/\\([a-z]+)(-?\d+)?\*?/gi, ' ')
+    .replace(/\{[^}]*\}/g, ' ')
+    .replace(/\\\n/g, '\n')
     .replace(/\\par\b/gi, '\n')
     .replace(/\\line\b/gi, '\n')
     .replace(/\\tab\b/gi, '\t')
-    .replace(/\\['"]{1}[0-9a-f]{2}/gi, '')             // hex chars
+    .replace(/\\['"]{1}[0-9a-f]{2}/gi, '')
     .replace(/[{}\\]/g, ' ')
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
 
   return plain;
+}
+
+/**
+ * Extract text from a plain-text (.txt) file.
+ * Tries UTF-8 first, falls back to latin-1 if the result has replacement chars.
+ */
+async function extractTxt(file) {
+  try {
+    const text = await readAsText(file, 'utf-8');
+    // If many replacement characters appear, retry with latin-1
+    const replacementCount = (text.match(/\uFFFD/g) || []).length;
+    if (replacementCount > 5) {
+      return readAsText(file, 'iso-8859-1');
+    }
+    return text;
+  } catch (_) {
+    return readAsText(file, 'iso-8859-1');
+  }
+}
+
+/**
+ * Extract text from an image file (JPG, PNG, GIF, WebP) using Tesseract.js OCR.
+ */
+async function extractImageOcr(file, onProgress) {
+  if (onProgress) onProgress('Iniciando OCR en imagen…');
+  const dataUrl = await readAsDataURL(file);
+  const worker  = await Tesseract.createWorker('spa+eng', 1, { logger: () => {} });
+  if (onProgress) onProgress('Reconociendo texto en la imagen…');
+  const { data: { text } } = await worker.recognize(dataUrl);
+  await worker.terminate();
+  return text;
 }
 
 /**
@@ -121,7 +163,6 @@ async function extractPdfOcr(file, onProgress) {
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
   const parts = [];
   const worker = await Tesseract.createWorker('spa+eng', 1, {
-    // silence Tesseract logs
     logger: () => {},
   });
 
@@ -145,9 +186,10 @@ async function extractPdfOcr(file, onProgress) {
 
 /**
  * Master extraction function. Selects the right strategy automatically.
+ * Supported: .pdf, .docx, .rtf, .txt, .jpg, .jpeg, .png, .gif, .webp
  * @param {File} file
  * @param {function} onProgress  – callback(message: string)
- * @returns {Promise<string>}    – extracted plain text
+ * @returns {Promise<{text, isPdf, isDigitalPdf}>}
  */
 async function extractText(file, onProgress = () => {}) {
   const ext = file.name.split('.').pop().toLowerCase();
@@ -161,6 +203,18 @@ async function extractText(file, onProgress = () => {}) {
   if (ext === 'rtf') {
     onProgress('Extrayendo texto RTF…');
     const text = await extractRtf(file);
+    return { text, isPdf: false, isDigitalPdf: false };
+  }
+
+  if (ext === 'txt') {
+    onProgress('Leyendo archivo de texto…');
+    const text = await extractTxt(file);
+    return { text, isPdf: false, isDigitalPdf: false };
+  }
+
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+    onProgress('Detectando texto en la imagen…');
+    const text = await extractImageOcr(file, onProgress);
     return { text, isPdf: false, isDigitalPdf: false };
   }
 
