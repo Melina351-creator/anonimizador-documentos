@@ -76,7 +76,8 @@
           <label class="toggle"><input type="checkbox" id="chk-plate" checked><span class="slider"></span> Matrículas de vehículos</label>
           <label class="toggle"><input type="checkbox" id="chk-ip" checked><span class="slider"></span> Direcciones IP</label>
           <label class="toggle"><input type="checkbox" id="chk-coords" checked><span class="slider"></span> Coordenadas GPS</label>
-          <h3 style="margin-top:18px">Datos clínicos</h3>
+          <label class="toggle"><input type="checkbox" id="chk-redact-images"><span class="slider"></span> Eliminar logos e im&aacute;genes en encabezado/pie <em style="font-size:.75rem;color:#9ca3af">(solo PDF)</em></label>
+          <h3 style="margin-top:18px">Datos cl&iacute;nicos</h3>
           <label class="toggle"><input type="checkbox" id="chk-receta" checked><span class="slider"></span> N&ordm; de receta m&eacute;dica</label>
           <label class="toggle"><input type="checkbox" id="chk-sexo" checked><span class="slider"></span> Sexo del paciente</label>
           <label class="toggle"><input type="checkbox" id="chk-matricula" checked><span class="slider"></span> Matr&iacute;cula m&eacute;dica</label>
@@ -129,7 +130,7 @@
       </div>
       <div id="confirm-banner" class="confirm-banner hidden">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        Revisa los datos detectados arriba. Cuando estés conforme, confirma para habilitar la descarga.
+        Haz clic en cualquier dato destacado (amarillo) para marcarlo como falso positivo y excluirlo del reemplazo. Cuando est&eacute;s conforme, confirma para habilitar la descarga.
       </div>
     </section>
 

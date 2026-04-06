@@ -323,6 +323,28 @@
     }
   });
 
+  // ── Manual review: toggle false positives by clicking highlighted PII ──────
+  $('preview-original').addEventListener('click', e => {
+    const mark = e.target.closest('[data-match-id]');
+    if (!mark) return;
+    const id = parseInt(mark.dataset.matchId, 10);
+    if (excludedMatchIds.has(id)) {
+      excludedMatchIds.delete(id);
+    } else {
+      excludedMatchIds.add(id);
+    }
+    // Re-render preview with updated exclusion state
+    const opts = getOptions();
+    $('preview-original').innerHTML = renderClickableMatches(extractedText, allMatches, excludedMatchIds);
+    // Re-anonymize and update right panel + stats
+    const { result, stats, total } = Anonymizer.anonymizeFromPositions(
+      extractedText, allMatches, excludedMatchIds, opts.mode
+    );
+    anonymizedText = result;
+    $('preview-anonymized').innerHTML = highlightAnonymized(anonymizedText);
+    renderStats(stats, total);
+  });
+
   // ── Downloads ──────────────────────────────────────────────────────
   function baseName() {
     return (currentFile?.name || 'documento').replace(/\.[^.]+$/, '');
