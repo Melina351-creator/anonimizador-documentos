@@ -35,18 +35,18 @@ function _readBuffer(file) {
  */
 function normalizeForPdf(text) {
   return text
-    .replace(/[\u2018\u2019]/g, "'")   // curly single quotes → straight
-    .replace(/[\u201C\u201D]/g, '"')   // curly double quotes → straight
-    .replace(/\u2014/g, '--')          // em dash
-    .replace(/\u2013/g, '-')           // en dash
-    .replace(/\u2026/g, '...')         // ellipsis
-    .replace(/\uFB00/g, 'ff')          // ff ligature
-    .replace(/\uFB01/g, 'fi')          // fi ligature
-    .replace(/\uFB02/g, 'fl')          // fl ligature
-    .replace(/\uFB03/g, 'ffi')         // ffi ligature
-    .replace(/\uFB04/g, 'ffl')         // ffl ligature
-    .replace(/[\u0080-\u009F]/g, '')   // C1 control chars
-    .replace(/[^\x00-\xFF]/g, '?');    // any remaining non-Latin-1
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2014/g, '--')
+    .replace(/\u2013/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/\uFB00/g, 'ff')
+    .replace(/\uFB01/g, 'fi')
+    .replace(/\uFB02/g, 'fl')
+    .replace(/\uFB03/g, 'ffi')
+    .replace(/\uFB04/g, 'ffl')
+    .replace(/[\u0080-\u009F]/g, '')
+    .replace(/[^\x00-\xFF]/g, '?');
 }
 
 /**
@@ -59,11 +59,8 @@ function downloadTxt(text, baseName) {
 
 /**
  * Download as DOCX.
- * Built with JSZip + handcrafted Open XML — no dependency on the docx npm library,
- * which was unreliable across CDN versions.
  */
 async function downloadDocx(text, baseName) {
-  // Escape special XML characters so the document XML is always valid
   function xe(str) {
     return str
       .replace(/&/g, '&amp;')
@@ -73,14 +70,11 @@ async function downloadDocx(text, baseName) {
       .replace(/'/g, '&apos;');
   }
 
-  // Build <w:p> elements — one paragraph per source line
   const lines = text.split('\n');
   const paragraphsXml = lines.map(line => {
     if (!line.trim()) {
-      // Empty line → empty paragraph with zero spacing
       return '<w:p><w:pPr><w:spacing w:after="0"/></w:pPr></w:p>';
     }
-    // Split on tabs so they render as real Word tabs
     const runs = line.split('\t').map((part, i) => {
       let r = '';
       if (i > 0) r += '<w:r><w:tab/></w:r>';
@@ -107,7 +101,7 @@ async function downloadDocx(text, baseName) {
     `    ${noticeXml}\n<w:p/>\n` +
     `    ${paragraphsXml}\n` +
     `    <w:sectPr>\n` +
-    `      <w:pgSz w:w="11906" w:h="16838"/>\n` +          // A4
+    `      <w:pgSz w:w="11906" w:h="16838"/>\n` +
     `      <w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1701"\n` +
     `               w:header="709" w:footer="709" w:gutter="0"/>\n` +
     `    </w:sectPr>\n` +
@@ -149,55 +143,119 @@ async function downloadDocx(text, baseName) {
 }
 
 /**
- * Download as PDF using jsPDF (for non-PDF source files: DOCX, RTF, OCR text).
- * Preserves text with proper Latin-1 encoding normalization.
+ * Download as PDF using jsPDF (for non-PDF source files).
  */
 function downloadPdf(text, baseName) {
   try {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
-  const marginLeft   = 20;
-  const marginRight  = 20;
-  const marginTop    = 25;
-  const marginBottom = 20;
-  const pageWidth    = doc.internal.pageSize.getWidth();
-  const pageHeight   = doc.internal.pageSize.getHeight();
-  const maxWidth     = pageWidth - marginLeft - marginRight;
-  const lineHeight   = 6;
+    const marginLeft   = 20;
+    const marginRight  = 20;
+    const marginTop    = 25;
+    const marginBottom = 20;
+    const pageWidth    = doc.internal.pageSize.getWidth();
+    const pageHeight   = doc.internal.pageSize.getHeight();
+    const maxWidth     = pageWidth - marginLeft - marginRight;
+    const lineHeight   = 6;
 
-  doc.setFontSize(9);
-  doc.setTextColor(150);
-  doc.text('Documento anonimizado – procesado localmente en el navegador', marginLeft, 12);
-  doc.setDrawColor(200);
-  doc.line(marginLeft, 15, pageWidth - marginRight, 15);
-  doc.setFontSize(10);
-  doc.setTextColor(30);
+    doc.setFontSize(9);
+    doc.setTextColor(150);
+    doc.text('Documento anonimizado – procesado localmente en el navegador', marginLeft, 12);
+    doc.setDrawColor(200);
+    doc.line(marginLeft, 15, pageWidth - marginRight, 15);
+    doc.setFontSize(10);
+    doc.setTextColor(30);
 
-  // Normalize to avoid garbled characters with built-in PDF fonts
-  const safeText = normalizeForPdf(text);
-  let y = marginTop;
-  const lines = doc.splitTextToSize(safeText, maxWidth);
+    const safeText = normalizeForPdf(text);
+    let y = marginTop;
+    const lines = doc.splitTextToSize(safeText, maxWidth);
 
-  for (const line of lines) {
-    if (y + lineHeight > pageHeight - marginBottom) {
-      doc.addPage();
-      y = marginTop;
+    for (const line of lines) {
+      if (y + lineHeight > pageHeight - marginBottom) {
+        doc.addPage();
+        y = marginTop;
+      }
+      doc.text(line, marginLeft, y);
+      y += lineHeight;
     }
-    doc.text(line, marginLeft, y);
-    y += lineHeight;
-  }
 
-  doc.save(`${baseName}_anonimizado.pdf`);
+    doc.save(`${baseName}_anonimizado.pdf`);
   } catch (err) {
     alert('Error al generar el PDF: ' + err.message);
+  }
+}
+
+// ── PDF in-place redaction helpers ────────────────────────────────────────────
+
+/**
+ * Wrap a page's existing content stream(s) in a save/restore graphics-state
+ * pair (q … Q).  This guarantees that whatever CTM, colour, or font state the
+ * original content leaves behind, it is fully restored before pdf-lib appends
+ * its own drawing operators.
+ *
+ * Without this, some PDFs (especially those generated by Microsoft Word,
+ * LibreOffice, or certain print drivers) end their content stream with an
+ * active non-identity CTM, causing our annotation boxes to appear at completely
+ * wrong positions ("al final del documento").
+ *
+ * Rendering order after wrapping:
+ *   q                    ← save initial (identity) state
+ *   <original content>   ← draws the page's text and graphics
+ *   Q                    ← restore → CTM is identity again
+ *   <pdf-lib operators>  ← our white erase + label boxes, in correct coords
+ */
+function _wrapPageContentInQQ(pdfDoc, pdfPage) {
+  try {
+    const { PDFName, PDFArray, PDFDict, PDFNumber, PDFRawStream } = PDFLib;
+
+    const contentsKey   = PDFName.of('Contents');
+    const existingValue = pdfPage.node.get(contentsKey);
+    if (!existingValue) return; // blank page – nothing to wrap
+
+    // Helper: create a tiny uncompressed content stream holding just one operator
+    const makeStreamRef = (operator) => {
+      const bytes = new TextEncoder().encode(operator);
+      const dict  = PDFDict.withContext(pdfDoc.context);
+      dict.set(PDFName.of('Length'), PDFNumber.of(bytes.length));
+      const stream = PDFRawStream.of(dict, bytes);
+      return pdfDoc.context.register(stream);
+    };
+
+    const qRef = makeStreamRef('q\n');  // graphics-state save
+    const QRef = makeStreamRef('Q\n');  // graphics-state restore
+
+    // Collect the existing content refs into an array
+    let existingRefs;
+    if (existingValue instanceof PDFArray) {
+      existingRefs = existingValue.asArray();
+    } else {
+      existingRefs = [existingValue]; // single PDFRef to a stream
+    }
+
+    // Build [qRef, ...existing, QRef] and replace Contents
+    const newContents = pdfDoc.context.obj([qRef, ...existingRefs, QRef]);
+    pdfPage.node.set(contentsKey, newContents);
+  } catch (_) {
+    // Best-effort: if wrapping fails the download still proceeds
   }
 }
 
 /**
  * Download a PDF with PII redacted IN-PLACE using pdf-lib.
  * Preserves the original layout, fonts, images and formatting.
- * Only the text items containing detected PII are covered with redaction boxes.
+ *
+ * Coordinate-system guarantee
+ * ───────────────────────────
+ * pdf.js getTextContent() returns item.transform[4/5] in the page's user-space
+ * (origin bottom-left of the MediaBox, units: points).  pdf-lib draws in the
+ * same coordinate space.  _wrapPageContentInQQ() ensures we're in the clean
+ * (identity-CTM) state when our operators execute, eliminating the class of
+ * bugs where the original content left an active scale/translate/flip on the
+ * CTM stack.
+ *
+ * An additional per-page scale factor (sx/sy) corrects any unit-system
+ * mismatch between the two libraries (rare but occurs with non-standard PDFs).
  *
  * @param {File}   file     – original PDF File object
  * @param {string} baseName – output filename base
@@ -205,163 +263,192 @@ function downloadPdf(text, baseName) {
  */
 async function downloadPdfRedacted(file, baseName, options) {
   try {
-  const { PDFDocument, rgb, StandardFonts } = PDFLib;
-  const mode = options.mode || 'label';
+    const { PDFDocument, rgb, StandardFonts } = PDFLib;
+    const mode = options.mode || 'label';
 
-  // Read buffer once and slice copies so both libraries get independent views
-  const rawBuffer = await _readBuffer(file);
-  const bufForPdfjs  = rawBuffer.slice(0);
-  const bufForPdflib = rawBuffer.slice(0);
+    const rawBuffer  = await _readBuffer(file);
+    const bufForPdfjs  = rawBuffer.slice(0);
+    const bufForPdflib = rawBuffer.slice(0);
 
-  // Load with pdf.js to extract text positions
-  const pdfjsDoc = await pdfjsLib.getDocument({ data: bufForPdfjs }).promise;
+    const pdfjsDoc = await pdfjsLib.getDocument({ data: bufForPdfjs }).promise;
+    const pdfDoc   = await PDFDocument.load(bufForPdflib, { ignoreEncryption: true });
+    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const pages = pdfDoc.getPages();
 
-  // Load with pdf-lib for in-place modification
-  const pdfDoc = await PDFDocument.load(bufForPdflib, { ignoreEncryption: true });
-  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const pages = pdfDoc.getPages();
-
-  for (let pageIdx = 0; pageIdx < pdfjsDoc.numPages; pageIdx++) {
-    // Yield every 5 pages to keep the UI responsive on long documents
-    if (pageIdx > 0 && pageIdx % 5 === 0) {
-      await new Promise(r => setTimeout(r, 0));
-    }
-    const pdfjsPage = await pdfjsDoc.getPage(pageIdx + 1);
-    const content   = await pdfjsPage.getTextContent();
-    const pdfPage   = pages[pageIdx];
-
-    // Filter to items that have actual text and a positive width
-    const items = content.items.filter(
-      item => item.str && item.str.trim().length > 0 && item.width > 0
-    );
-    if (!items.length) continue;
-
-    // ── Build a concatenated page string with a character→item index map ──
-    // This lets us detect PII that spans across multiple adjacent text items.
-    let pageText = '';
-    const itemMap = []; // itemMap[charPos] = index into items[], or -1 for separators
-
-    for (let i = 0; i < items.length; i++) {
-      const str = items[i].str;
-      for (let j = 0; j < str.length; j++) {
-        itemMap.push(i);
-        pageText += str[j];
+    for (let pageIdx = 0; pageIdx < pdfjsDoc.numPages; pageIdx++) {
+      if (pageIdx > 0 && pageIdx % 5 === 0) {
+        await new Promise(r => setTimeout(r, 0));
       }
-      // Add a space separator between items (not part of any item)
-      itemMap.push(-1);
-      pageText += ' ';
-    }
 
-    // ── Find PII positions in the concatenated page text ──
-    const rawMatches = Anonymizer.findMatchPositions(pageText, options);
-    // Skip any text the user explicitly excluded as a false positive
-    const matches = options.skipTexts?.length
-      ? rawMatches.filter(m =>
-          !options.skipTexts.some(t => t === pageText.slice(m.start, m.end).toLowerCase())
-        )
-      : rawMatches;
-    if (!matches.length) continue;
+      const pdfjsPage = await pdfjsDoc.getPage(pageIdx + 1);
+      const content   = await pdfjsPage.getTextContent();
+      const pdfPage   = pages[pageIdx];
 
-    // ── Map matched positions back to text items ──
-    const toRedact = new Map(); // itemIdx → label (first match label wins)
-    for (const { start, end, label } of matches) {
-      for (let pos = start; pos < Math.min(end, itemMap.length); pos++) {
-        const idx = itemMap[pos];
-        if (idx >= 0 && !toRedact.has(idx)) {
-          toRedact.set(idx, label);
+      // ── Coordinate-system fix ──────────────────────────────────────────────
+      // Wrap the existing page content in q/Q so our appended drawing operators
+      // always execute in the canonical (identity-CTM) user-space coordinate system.
+      _wrapPageContentInQQ(pdfDoc, pdfPage);
+
+      // Per-page scale: accounts for unit differences between pdf.js and pdf-lib.
+      // For standard PDFs both report the same dimensions; scale = 1.0.
+      // For PDFs with non-zero MediaBox origin the offset is removed first.
+      const view      = pdfjsPage.view;  // [x0, y0, x1, y1]
+      const pdfjsW    = view[2] - view[0];
+      const pdfjsH    = view[3] - view[1];
+      const { width: plW, height: plH } = pdfPage.getSize();
+      const sx = pdfjsW > 0 ? plW / pdfjsW : 1;
+      const sy = pdfjsH > 0 ? plH / pdfjsH : 1;
+      const ox = view[0]; // MediaBox x-origin (usually 0)
+      const oy = view[1]; // MediaBox y-origin (usually 0)
+
+      // Filter to items that have actual text
+      const items = content.items.filter(
+        item => item.str && item.str.trim().length > 0
+      );
+      if (!items.length) continue;
+
+      // ── Build concatenated page text with char→item mapping ───────────────
+      let pageText = '';
+      const itemMap = [];
+
+      for (let i = 0; i < items.length; i++) {
+        const str = items[i].str;
+        for (let j = 0; j < str.length; j++) {
+          itemMap.push(i);
+          pageText += str[j];
+        }
+        itemMap.push(-1);
+        pageText += ' ';
+      }
+
+      // ── Find PII positions ────────────────────────────────────────────────
+      const rawMatches = Anonymizer.findMatchPositions(pageText, options);
+      const matches = options.skipTexts?.length
+        ? rawMatches.filter(m =>
+            !options.skipTexts.some(t => t === pageText.slice(m.start, m.end).toLowerCase())
+          )
+        : rawMatches;
+      if (!matches.length) continue;
+
+      // ── Map matched char positions → text items ───────────────────────────
+      const toRedact = new Map(); // itemIdx → label
+      for (const { start, end, label } of matches) {
+        for (let pos = start; pos < Math.min(end, itemMap.length); pos++) {
+          const idx = itemMap[pos];
+          if (idx >= 0 && !toRedact.has(idx)) {
+            toRedact.set(idx, label);
+          }
         }
       }
-    }
 
-    // ── Draw redaction boxes over each PII-containing text item ──
-    for (const [idx, label] of toRedact) {
-      const item = items[idx];
+      // ── Draw redaction boxes ──────────────────────────────────────────────
+      for (const [idx, label] of toRedact) {
+        const item = items[idx];
 
-      // Text matrix: [a, b, c, d, tx, ty]  – tx/ty are in PDF user space (points, origin bottom-left)
-      const tx = item.transform[4];
-      const ty = item.transform[5];
-      const w  = item.width;
-      // Use item.height if reliable, otherwise fall back to the font scale from the matrix.
-      // Enforce a minimum of 8pt so the redaction box is always visible even when
-      // the PDF uses unusual transform matrices (near-zero values cause invisible boxes).
-      const h  = Math.max(item.height > 0 ? item.height : Math.abs(item.transform[3]), 8);
+        // item.width can be 0 for some items (e.g. ligatures, zero-width spaces)
+        // Use a minimum width so we always draw something visible.
+        const rawW = typeof item.width === 'number' ? item.width : 0;
 
-      if (w <= 0) continue;
+        // The text matrix gives absolute user-space coordinates for the glyph origin.
+        // transform = [a, b, c, d, tx, ty]  where tx/ty are the baseline position.
+        const rawTx = item.transform[4];
+        const rawTy = item.transform[5];
 
-      // Rectangle covers from slightly below the baseline to slightly above cap height
-      const rectY = ty - h * 0.18;
-      const rectH = h * 1.32;
+        // Apply MediaBox offset correction + scale to match pdf-lib's coordinate space
+        const tx = (rawTx - ox) * sx;
+        const ty = (rawTy - oy) * sy;
+        const w  = rawW * sx;
 
-      if (mode === 'redact') {
-        // Solid opaque black bar
-        pdfPage.drawRectangle({ x: tx, y: rectY, width: w, height: rectH, color: rgb(0, 0, 0), opacity: 1 });
-      } else {
-        // Step 1: white "erase" layer — paints over the original text characters so they
-        // don't bleed through in PDFs where content streams are evaluated in an order
-        // that places original text AFTER pdf-lib's appended drawing operators.
-        pdfPage.drawRectangle({ x: tx - 1, y: rectY - 1, width: w + 2, height: rectH + 2,
-          color: rgb(1, 1, 1), opacity: 1 });
-        // Step 2: colored annotation box on top
-        pdfPage.drawRectangle({
-          x: tx, y: rectY, width: w, height: rectH,
-          color: rgb(0.93, 0.95, 1.0),
-          borderColor: rgb(0.55, 0.65, 0.85),
-          borderWidth: 0.5,
-          opacity: 1,
-        });
+        // Height: prefer item.height (bounding-box height above baseline).
+        // Fall back to the Y-scale component of the font matrix (≈ font size).
+        // Enforce a minimum of 8 pt so the box is always visible.
+        const rawH = item.height > 0
+          ? item.height
+          : Math.abs(item.transform[3]);
+        const h = Math.max(rawH > 0 ? rawH * sy : 8, 8);
 
-        const labelText = mode === 'placeholder'
-          ? '[DATO]'
-          : `[${label.substring(0, 14)}]`;
+        // Use a generous padding so the erase layer covers any ascenders/descenders.
+        // rectY is below the baseline; rectY + rectH is well above cap-height.
+        const pad   = Math.max(h * 0.25, 2);
+        const rectX = tx - 1;
+        const rectY = ty - pad;
+        const rectW = (w > 0 ? w : h * 3) + 2; // fallback width for zero-width items
+        const rectH = h + pad * 2;
 
-        const fontSize = Math.max(Math.min(h * 0.72, 7), 3);
-        if (fontSize >= 3) {
+        if (mode === 'redact') {
+          // Solid black bar – covers everything underneath
+          pdfPage.drawRectangle({
+            x: rectX, y: rectY, width: rectW, height: rectH,
+            color: rgb(0, 0, 0), opacity: 1,
+          });
+        } else {
+          // ── Layer 1: white "erase" rectangle ──────────────────────────────
+          // Drawn slightly LARGER than the annotation box to guarantee the
+          // original text glyphs are covered even if the font has large ascenders.
+          pdfPage.drawRectangle({
+            x: rectX - 1, y: rectY - 1, width: rectW + 2, height: rectH + 2,
+            color: rgb(1, 1, 1), opacity: 1,
+          });
+
+          // ── Layer 2: coloured annotation box ──────────────────────────────
+          pdfPage.drawRectangle({
+            x: rectX, y: rectY, width: rectW, height: rectH,
+            color: rgb(0.93, 0.95, 1.0),
+            borderColor: rgb(0.55, 0.65, 0.85),
+            borderWidth: 0.5,
+            opacity: 1,
+          });
+
+          // ── Layer 3: label text ────────────────────────────────────────────
+          const labelText = mode === 'placeholder'
+            ? '[DATO]'
+            : `[${label.substring(0, 14)}]`;
+
+          const fontSize = Math.max(Math.min(h * 0.65, 7), 3);
           try {
             pdfPage.drawText(labelText, {
-              x: tx + 1,
-              y: ty + 0.5,
+              x: rectX + 2,
+              y: ty - fontSize * 0.15,  // align label text at the original baseline
               size: fontSize,
               font: helvetica,
               color: rgb(0.12, 0.32, 0.72),
               opacity: 1,
             });
           } catch (_) {
-            // If character encoding fails (rare), the background box is still drawn
+            // Encoding edge-case – the box is still drawn
           }
         }
       }
-    }
 
-    // Optional: draw grey bars over header/footer areas on pages that contain images
-    // (covers logos and other non-text PII that text redaction cannot reach).
-    if (options.redactImages) {
-      try {
-        const resources = pdfPage.node.Resources();
-        const xObjs     = resources?.lookupMaybe(PDFLib.PDFName.of('XObject'), PDFLib.PDFDict);
-        let hasImg = false;
-        if (xObjs) {
-          for (const [, ref] of xObjs.entries()) {
-            const xobj = pdfDoc.context.lookupMaybe(ref, PDFLib.PDFDict);
-            if (xobj) {
-              const sub = xobj.lookupMaybe(PDFLib.PDFName.of('Subtype'), PDFLib.PDFName);
-              if (sub?.encodedName === '/Image') { hasImg = true; break; }
+      // Optional: grey bars over header/footer image regions
+      if (options.redactImages) {
+        try {
+          const resources = pdfPage.node.Resources();
+          const xObjs     = resources?.lookupMaybe(PDFLib.PDFName.of('XObject'), PDFLib.PDFDict);
+          let hasImg = false;
+          if (xObjs) {
+            for (const [, ref] of xObjs.entries()) {
+              const xobj = pdfDoc.context.lookupMaybe(ref, PDFLib.PDFDict);
+              if (xobj) {
+                const sub = xobj.lookupMaybe(PDFLib.PDFName.of('Subtype'), PDFLib.PDFName);
+                if (sub?.encodedName === '/Image') { hasImg = true; break; }
+              }
             }
           }
-        }
-        if (hasImg) {
-          const { width, height } = pdfPage.getSize();
-          const grey = rgb(0.45, 0.45, 0.45);
-          // Cover standard header area (top 80pt ≈ 28mm) and footer area (bottom 50pt ≈ 18mm)
-          pdfPage.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: grey });
-          pdfPage.drawRectangle({ x: 0, y: 0,           width, height: 50, color: grey });
-        }
-      } catch (_) { /* resource inspection is best-effort */ }
+          if (hasImg) {
+            const { width, height } = pdfPage.getSize();
+            const grey = rgb(0.45, 0.45, 0.45);
+            pdfPage.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: grey });
+            pdfPage.drawRectangle({ x: 0, y: 0, width, height: 50, color: grey });
+          }
+        } catch (_) {}
+      }
     }
-  }
 
-  const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-  triggerDownload(blob, `${baseName}_anonimizado.pdf`);
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    triggerDownload(blob, `${baseName}_anonimizado.pdf`);
+
   } catch (err) {
     if (err instanceof RangeError || err.message?.toLowerCase().includes('memory')) {
       alert('El PDF es demasiado grande para procesarlo en el navegador. Descargue en formato TXT como alternativa.');

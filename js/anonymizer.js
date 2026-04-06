@@ -110,8 +110,9 @@ const PATTERNS = {
   birthdateText: {
     label: 'Fecha',
     confidence: 'high',
-    // Written-out dates: "3 de junio de 2024", "15 de enero de 1985"
-    re: /\b(?:0?[1-9]|[12]\d|3[01])\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+de\s+(?:19|20)\d{2}\b/gi,
+    // Written-out dates: "3 de junio de 2024", "15 de enero del 2024", "1 de marzo de 1985"
+    // "del" = "de el" contraction also accepted before the year.
+    re: /\b(?:0?[1-9]|[12]\d|3[01])\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+del?\s+(?:19|20)\d{2}\b/gi,
   },
   receta: {
     label: 'Nº Receta',
@@ -133,7 +134,13 @@ const PATTERNS = {
   company: {
     label: 'Empresa',
     confidence: 'medium',
-    re: /\b[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?)(?=[\s,;:\n\.]|$)/gi,
+    // Two alternatives:
+    // 1. Organization names beginning with a recognised entity-type keyword
+    //    (Fundación, Asociación, Instituto, Hospital…) – no mandatory legal suffix.
+    //    Captures up to 5 additional capitalized words.
+    // 2. Standard company name: 1-4 capitalized words + mandatory legal suffix
+    //    (S.A., S.R.L., S.A. de C.V., Asociación Civil, A.C., Inc., …).
+    re: /\b(?:Fundaci[oó]n|Asociaci[oó]n(?:\s+Civil)?|Instituto|Corporaci[oó]n|Hospital|Cl[ií]nica|Escuela|Centro|Consultorio|Laboratorio(?:s)?|Farmacia(?:s)?)\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}(?:\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,5}|\b[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.]|$)/gi,
   },
   names: {
     label: 'Nombre',
@@ -155,9 +162,10 @@ const PATTERNS = {
   namesAllCaps: {
     label: 'Nombre',
     confidence: 'low',
-    // {1,3} = 1-3 additional words, so minimum 2 words total (e.g. "HERNÁN RAMÍREZ")
+    // {1,5} = 1-5 additional words, so 2-6 words total.
+    // Allows long full names and organization names (e.g. "HERNÁN RAMÍREZ GUTIÉRREZ").
     // Stopword filtering applied in findMatchPositions to reduce false positives.
-    re: /\b[A-ZÁÉÍÓÚÜÑ]{3,20}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,20}){1,3}\b/g,
+    re: /\b[A-ZÁÉÍÓÚÜÑ]{3,20}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,20}){1,5}\b/g,
   },
 };
 
