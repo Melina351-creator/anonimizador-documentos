@@ -253,7 +253,13 @@ async function downloadPdfRedacted(file, baseName, options) {
     }
 
     // ── Find PII positions in the concatenated page text ──
-    const matches = Anonymizer.findMatchPositions(pageText, options);
+    const rawMatches = Anonymizer.findMatchPositions(pageText, options);
+    // Skip any text the user explicitly excluded as a false positive
+    const matches = options.skipTexts?.length
+      ? rawMatches.filter(m =>
+          !options.skipTexts.some(t => t === pageText.slice(m.start, m.end).toLowerCase())
+        )
+      : rawMatches;
     if (!matches.length) continue;
 
     // ── Map matched positions back to text items ──
@@ -275,25 +281,33 @@ async function downloadPdfRedacted(file, baseName, options) {
       const tx = item.transform[4];
       const ty = item.transform[5];
       const w  = item.width;
-      // Use item.height if reliable, otherwise fall back to the font scale from the matrix
-      const h  = item.height > 0 ? item.height : Math.abs(item.transform[3]);
+      // Use item.height if reliable, otherwise fall back to the font scale from the matrix.
+      // Enforce a minimum of 8pt so the redaction box is always visible even when
+      // the PDF uses unusual transform matrices (near-zero values cause invisible boxes).
+      const h  = Math.max(item.height > 0 ? item.height : Math.abs(item.transform[3]), 8);
 
-      if (w <= 0 || h <= 0) continue;
+      if (w <= 0) continue;
 
       // Rectangle covers from slightly below the baseline to slightly above cap height
       const rectY = ty - h * 0.18;
       const rectH = h * 1.32;
 
       if (mode === 'redact') {
-        // Solid black redaction bar
-        pdfPage.drawRectangle({ x: tx, y: rectY, width: w, height: rectH, color: rgb(0, 0, 0) });
+        // Solid opaque black bar
+        pdfPage.drawRectangle({ x: tx, y: rectY, width: w, height: rectH, color: rgb(0, 0, 0), opacity: 1 });
       } else {
-        // Light background + descriptive label
+        // Step 1: white "erase" layer — paints over the original text characters so they
+        // don't bleed through in PDFs where content streams are evaluated in an order
+        // that places original text AFTER pdf-lib's appended drawing operators.
+        pdfPage.drawRectangle({ x: tx - 1, y: rectY - 1, width: w + 2, height: rectH + 2,
+          color: rgb(1, 1, 1), opacity: 1 });
+        // Step 2: colored annotation box on top
         pdfPage.drawRectangle({
           x: tx, y: rectY, width: w, height: rectH,
           color: rgb(0.93, 0.95, 1.0),
           borderColor: rgb(0.55, 0.65, 0.85),
           borderWidth: 0.5,
+          opacity: 1,
         });
 
         const labelText = mode === 'placeholder'
@@ -309,6 +323,7 @@ async function downloadPdfRedacted(file, baseName, options) {
               size: fontSize,
               font: helvetica,
               color: rgb(0.12, 0.32, 0.72),
+              opacity: 1,
             });
           } catch (_) {
             // If character encoding fails (rare), the background box is still drawn
