@@ -316,6 +316,19 @@ main {
   background: var(--gray-50);
 }
 .highlight-found { background: #fef3c7; border-radius: 3px; padding: 0 2px; }
+/* Manual review: clickable PII marks in original text panel */
+.highlight-pii-click { cursor: pointer; border-bottom: 2px solid #f59e0b; }
+.highlight-pii-click:hover { background: #fcd34d; }
+.highlight-excluded {
+  background: #fee2e2;
+  color: #991b1b;
+  text-decoration: line-through;
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: .75;
+}
+.highlight-excluded:hover { background: #fecaca; opacity: 1; }
 .highlight-replaced {
   background: #d1fae5;
   color: #065f46;

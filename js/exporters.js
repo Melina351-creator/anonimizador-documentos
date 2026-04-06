@@ -153,6 +153,7 @@ async function downloadDocx(text, baseName) {
  * Preserves text with proper Latin-1 encoding normalization.
  */
 function downloadPdf(text, baseName) {
+  try {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
@@ -188,6 +189,9 @@ function downloadPdf(text, baseName) {
   }
 
   doc.save(`${baseName}_anonimizado.pdf`);
+  } catch (err) {
+    alert('Error al generar el PDF: ' + err.message);
+  }
 }
 
 /**
@@ -200,6 +204,7 @@ function downloadPdf(text, baseName) {
  * @param {object} options  – same options object used for anonymization
  */
 async function downloadPdfRedacted(file, baseName, options) {
+  try {
   const { PDFDocument, rgb, StandardFonts } = PDFLib;
   const mode = options.mode || 'label';
 
@@ -217,6 +222,10 @@ async function downloadPdfRedacted(file, baseName, options) {
   const pages = pdfDoc.getPages();
 
   for (let pageIdx = 0; pageIdx < pdfjsDoc.numPages; pageIdx++) {
+    // Yield every 5 pages to keep the UI responsive on long documents
+    if (pageIdx > 0 && pageIdx % 5 === 0) {
+      await new Promise(r => setTimeout(r, 0));
+    }
     const pdfjsPage = await pdfjsDoc.getPage(pageIdx + 1);
     const content   = await pdfjsPage.getTextContent();
     const pdfPage   = pages[pageIdx];
@@ -307,11 +316,44 @@ async function downloadPdfRedacted(file, baseName, options) {
         }
       }
     }
+
+    // Optional: draw grey bars over header/footer areas on pages that contain images
+    // (covers logos and other non-text PII that text redaction cannot reach).
+    if (options.redactImages) {
+      try {
+        const resources = pdfPage.node.Resources();
+        const xObjs     = resources?.lookupMaybe(PDFLib.PDFName.of('XObject'), PDFLib.PDFDict);
+        let hasImg = false;
+        if (xObjs) {
+          for (const [, ref] of xObjs.entries()) {
+            const xobj = pdfDoc.context.lookupMaybe(ref, PDFLib.PDFDict);
+            if (xobj) {
+              const sub = xobj.lookupMaybe(PDFLib.PDFName.of('Subtype'), PDFLib.PDFName);
+              if (sub?.encodedName === '/Image') { hasImg = true; break; }
+            }
+          }
+        }
+        if (hasImg) {
+          const { width, height } = pdfPage.getSize();
+          const grey = rgb(0.45, 0.45, 0.45);
+          // Cover standard header area (top 80pt ≈ 28mm) and footer area (bottom 50pt ≈ 18mm)
+          pdfPage.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: grey });
+          pdfPage.drawRectangle({ x: 0, y: 0,           width, height: 50, color: grey });
+        }
+      } catch (_) { /* resource inspection is best-effort */ }
+    }
   }
 
   const pdfBytes = await pdfDoc.save();
   const blob = new Blob([pdfBytes], { type: 'application/pdf' });
   triggerDownload(blob, `${baseName}_anonimizado.pdf`);
+  } catch (err) {
+    if (err instanceof RangeError || err.message?.toLowerCase().includes('memory')) {
+      alert('El PDF es demasiado grande para procesarlo en el navegador. Descargue en formato TXT como alternativa.');
+    } else {
+      alert('Error al procesar el PDF: ' + err.message);
+    }
+  }
 }
 
 window.Exporters = { downloadTxt, downloadDocx, downloadPdf, downloadPdfRedacted };
