@@ -158,6 +158,7 @@
       namesCtx:       $('chk-names').checked,
       namesTitleCase: $('chk-names').checked,
       namesAllCaps:   $('chk-names').checked,
+      company:        $('chk-company').checked,
       // Document ID detection
       dni:            $('chk-dni').checked,
       dniAR:          $('chk-dni').checked,
@@ -325,24 +326,29 @@
 
   // ── Manual review: toggle false positives by clicking highlighted PII ──────
   $('preview-original').addEventListener('click', e => {
-    const mark = e.target.closest('[data-match-id]');
-    if (!mark) return;
-    const id = parseInt(mark.dataset.matchId, 10);
-    if (excludedMatchIds.has(id)) {
-      excludedMatchIds.delete(id);
-    } else {
-      excludedMatchIds.add(id);
+    try {
+      const mark = e.target.closest('[data-match-id]');
+      if (!mark) return;
+      const id = parseInt(mark.dataset.matchId, 10);
+      if (isNaN(id)) return;
+      if (excludedMatchIds.has(id)) {
+        excludedMatchIds.delete(id);
+      } else {
+        excludedMatchIds.add(id);
+      }
+      // Re-render original panel with updated exclusion state
+      const opts = getOptions();
+      $('preview-original').innerHTML = renderClickableMatches(extractedText, allMatches, excludedMatchIds);
+      // Re-anonymize and update right panel + stats
+      const { result, stats, total } = Anonymizer.anonymizeFromPositions(
+        extractedText, allMatches, excludedMatchIds, opts.mode
+      );
+      anonymizedText = result;
+      $('preview-anonymized').innerHTML = highlightAnonymized(anonymizedText);
+      renderStats(stats, total);
+    } catch (err) {
+      console.error('Error al excluir dato:', err);
     }
-    // Re-render preview with updated exclusion state
-    const opts = getOptions();
-    $('preview-original').innerHTML = renderClickableMatches(extractedText, allMatches, excludedMatchIds);
-    // Re-anonymize and update right panel + stats
-    const { result, stats, total } = Anonymizer.anonymizeFromPositions(
-      extractedText, allMatches, excludedMatchIds, opts.mode
-    );
-    anonymizedText = result;
-    $('preview-anonymized').innerHTML = highlightAnonymized(anonymizedText);
-    renderStats(stats, total);
   });
 
   // ── Downloads ──────────────────────────────────────────────────────
@@ -358,10 +364,18 @@
 
   $('btn-download-pdf').addEventListener('click', () => {
     if (sourceIsDigitalPdf) {
-      // Bug 2: redact in-place on the original PDF to preserve layout
-      Exporters.downloadPdfRedacted(currentFile, baseName(), getOptions());
+      // Redact in-place on the original PDF to preserve layout.
+      // Pass the excluded match texts so the redactor can skip them.
+      const opts = getOptions();
+      if (excludedMatchIds.size > 0) {
+        opts.skipTexts = allMatches
+          .filter(m => excludedMatchIds.has(m.id))
+          .map(m => extractedText.slice(m.start, m.end).toLowerCase());
+      }
+      Exporters.downloadPdfRedacted(currentFile, baseName(), opts);
     } else {
-      // Non-PDF source (DOCX, RTF, OCR): generate text-based PDF
+      // Non-PDF source (DOCX, RTF, OCR): generate text-based PDF from anonymizedText
+      // which already reflects any false-positive exclusions.
       Exporters.downloadPdf(anonymizedText, baseName());
     }
   });

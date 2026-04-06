@@ -99,10 +99,14 @@ const PATTERNS = {
     re: /\b[-+]?([1-8]?\d(\.\d+)?|90(\.0+)?),\s*[-+]?(180(\.0+)?|((1[0-7]\d)|([1-9]?\d))(\.\d+)?)\b/g,
   },
   birthdate: {
-    label: 'Fecha nacimiento',
-    // Bug fix: added \. so dates with dots (15.03.1990) are also matched.
-    // Also expanded keyword variants: f.nac, fec.nac, fecha nac.
-    re: /\b(?:nacid[ao]|fecha\s+de\s+nacimiento|fecha\s+nac\.?|fec\.?\s*nac\.?|f\.?\s*nac\.?)[:\s]+\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{2,4}\b|\b\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{4}\b|\b(?:19|20)\d{2}[\-\/\.]\d{1,2}[\-\/\.]\d{1,2}\b/gi,
+    label: 'Fecha',
+    // SEP matches ASCII hyphen/slash/dot AND non-ASCII variants used by some
+    // PDF/DOCX extractors: non-breaking hyphen (U+2011) and en-dash (U+2013).
+    // Pattern 1: keyword + date (any separator, any order)
+    // Pattern 2: standalone DD-MM-YYYY / DD/MM/YYYY / DD.MM.YYYY
+    // Pattern 3: standalone YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD
+    // Pattern 4: explicit DD-MM-YYYY with hyphen (defensive, covers extraction artifacts)
+    re: /\b(?:nacid[ao]|fecha\s+de\s+nacimiento|fecha\s+nac\.?|fec\.?\s*nac\.?|f\.?\s*nac\.?|fecha)[:\s]+\d{1,2}[\-\/\.\u2011\u2013]\d{1,2}[\-\/\.\u2011\u2013]\d{2,4}\b|\b\d{1,2}[\-\/\.\u2011\u2013]\d{1,2}[\-\/\.\u2011\u2013]\d{4}\b|\b(?:19|20)\d{2}[\-\/\.\u2011\u2013]\d{1,2}[\-\/\.\u2011\u2013]\d{1,2}\b|\b(?:0?[1-9]|[12]\d|3[01])-(?:0?[1-9]|1[0-2])-(?:19|20)\d{2}\b/gi,
   },
   receta: {
     label: 'Nº Receta',
@@ -119,6 +123,15 @@ const PATTERNS = {
     // Medical or professional license number after "matrícula" keyword
     re: /(?<=\bmatr[ií]cula\b[^0-9]{0,20})\d{4,10}\b/gi,
   },
+  // company runs BEFORE generic name patterns so "Deksia México S.A." is matched
+  // whole (with its legal suffix) and not partially consumed as a person's name.
+  company: {
+    label: 'Empresa',
+    // Razón social: 1-4 capitalized/ALLCAPS words followed by a legal entity suffix.
+    // Alternatives ordered from most specific to least to avoid early-exit on short suffixes.
+    // Examples: "Deksia México S.A", "Knotion S.A. de C.V.", "García y López S.R.L."
+    re: /\b[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?)(?=[\s,;:\n\.]|$)/gi,
+  },
   names: {
     label: 'Nombre',
     re: /\b(?:D\.?|D[oañ]\.?|Don|Doña|Sr\.?a?\.?|Dr\.?a?\.?|Lic\.?|Excm[ao]\.?|Ilm[ao]\.?|Prof\.?)\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:\s+(?:de\s+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){0,3}/g,
@@ -129,11 +142,13 @@ const PATTERNS = {
   },
   namesTitleCase: {
     label: 'Nombre',
-    re: /\b[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){2,3}\b/g,
+    // {1,3} = 1-3 additional words, so minimum 2 words total (e.g. "Francisco Firpo")
+    re: /\b[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){1,3}\b/g,
   },
   namesAllCaps: {
     label: 'Nombre',
-    re: /\b[A-ZÁÉÍÓÚÜÑ]{3,20}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,20}){2,3}\b/g,
+    // {1,3} = 1-3 additional words, so minimum 2 words total (e.g. "HERNÁN RAMÍREZ")
+    re: /\b[A-ZÁÉÍÓÚÜÑ]{3,20}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,20}){1,3}\b/g,
   },
 };
 
