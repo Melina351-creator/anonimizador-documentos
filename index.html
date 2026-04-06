@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,7 +17,23 @@
         </svg>
         <span>Anonimizador de Documentos</span>
       </div>
-      <div class="badge">100% Local &mdash; Sin conexión a servidores</div>
+      <div class="header-right">
+        <div class="badge">100% Local &mdash; Sin conexión a servidores</div>
+        <button id="btn-theme" class="btn-theme" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema">
+          <!-- Sun icon (shown in dark mode) -->
+          <svg id="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hidden">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <!-- Moon icon (shown in light mode) -->
+          <svg id="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -36,8 +52,8 @@
           <polyline points="9 15 12 12 15 15"/>
         </svg>
         <p>Arrastra tu documento aquí o <span id="select-link" class="link">selecciona un archivo</span></p>
-        <p class="formats">Word (.docx) &bull; RTF &bull; PDF digital &bull; PDF escaneado</p>
-        <input type="file" id="file-input" accept=".docx,.rtf,.pdf" hidden>
+        <p class="formats">Word (.docx) &bull; RTF &bull; TXT &bull; PDF digital &bull; PDF escaneado &bull; Imagen (JPG, PNG)</p>
+        <input type="file" id="file-input" accept=".docx,.rtf,.pdf,.txt,.jpg,.jpeg,.png,.gif,.webp" hidden>
       </div>
       <div id="file-info" class="file-info hidden">
         <div class="file-icon" id="file-icon"></div>
@@ -103,6 +119,20 @@
           </div>
         </div>
       </div>
+
+      <!-- Profile export / import -->
+      <div class="config-actions">
+        <div class="config-presets">
+          <span class="presets-label">Perfiles predefinidos:</span>
+          <button id="btn-preset-medico" class="btn-preset">Médico</button>
+          <button id="btn-preset-juridico" class="btn-preset">Jurídico</button>
+        </div>
+        <div class="config-io">
+          <button id="btn-export-config" class="btn-secondary btn-sm">&#8595; Exportar perfil</button>
+          <button id="btn-import-config" class="btn-secondary btn-sm">&#8593; Importar perfil</button>
+          <input type="file" id="import-config-input" accept=".json" hidden>
+        </div>
+      </div>
     </section>
 
     <!-- Step 3: Preview & Process -->
@@ -128,10 +158,11 @@
       <div id="stats-bar" class="stats-bar hidden">
         <div class="stat"><span id="stat-total">0</span> datos detectados</div>
         <div class="stat-breakdown" id="stat-breakdown"></div>
+        <div class="stat-confidence hidden" id="stat-confidence"></div>
       </div>
       <div id="confirm-banner" class="confirm-banner hidden">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        Haz clic en cualquier dato destacado (amarillo) para marcarlo como falso positivo y excluirlo del reemplazo. Cuando est&eacute;s conforme, confirma para habilitar la descarga.
+        Haz clic en cualquier dato destacado (amarillo) para marcarlo como falso positivo y excluirlo del reemplazo. Selecciona texto con el ratón para añadirlo manualmente. Cuando est&eacute;s conforme, confirma.
       </div>
     </section>
 
@@ -166,6 +197,11 @@
       <button id="btn-confirm" class="btn-confirm hidden">&#10003;&nbsp; Confirmar y descargar</button>
     </div>
   </main>
+
+  <!-- Selection tooltip (shown when user selects text in the original panel) -->
+  <div id="selection-tooltip" class="selection-tooltip hidden">
+    <button id="btn-add-selection">+ Anonimizar selección</button>
+  </div>
 
   <footer>
     <p>Todo el procesamiento ocurre en tu navegador. Ning&uacute;n dato sale de tu ordenador.</p>
