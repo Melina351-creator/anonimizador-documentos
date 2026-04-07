@@ -257,11 +257,12 @@ function _wrapPageContentInQQ(pdfDoc, pdfPage) {
  * An additional per-page scale factor (sx/sy) corrects any unit-system
  * mismatch between the two libraries (rare but occurs with non-standard PDFs).
  *
- * @param {File}   file     – original PDF File object
- * @param {string} baseName – output filename base
- * @param {object} options  – same options object used for anonymization
+ * @param {File}   file         – original PDF File object
+ * @param {string} baseName     – output filename base
+ * @param {object} options      – same options object used for anonymization
+ * @param {string} [fallbackText] – if provided, used for jsPDF fallback on error
  */
-async function downloadPdfRedacted(file, baseName, options) {
+async function downloadPdfRedacted(file, baseName, options, fallbackText = null) {
   try {
     const { PDFDocument, rgb, StandardFonts } = PDFLib;
     const mode = options.mode || 'label';
@@ -276,172 +277,179 @@ async function downloadPdfRedacted(file, baseName, options) {
     const pages = pdfDoc.getPages();
 
     for (let pageIdx = 0; pageIdx < pdfjsDoc.numPages; pageIdx++) {
-      if (pageIdx > 0 && pageIdx % 5 === 0) {
-        await new Promise(r => setTimeout(r, 0));
-      }
+      // Yield to UI on every page to keep responsive
+      await new Promise(r => setTimeout(r, 0));
+      try {
+        const pdfjsPage = await pdfjsDoc.getPage(pageIdx + 1);
+        const content   = await pdfjsPage.getTextContent();
+        const pdfPage   = pages[pageIdx];
 
-      const pdfjsPage = await pdfjsDoc.getPage(pageIdx + 1);
-      const content   = await pdfjsPage.getTextContent();
-      const pdfPage   = pages[pageIdx];
+        // ── Coordinate-system fix ──────────────────────────────────────────────
+        // Wrap the existing page content in q/Q so our appended drawing operators
+        // always execute in the canonical (identity-CTM) user-space coordinate system.
+        _wrapPageContentInQQ(pdfDoc, pdfPage);
 
-      // ── Coordinate-system fix ──────────────────────────────────────────────
-      // Wrap the existing page content in q/Q so our appended drawing operators
-      // always execute in the canonical (identity-CTM) user-space coordinate system.
-      _wrapPageContentInQQ(pdfDoc, pdfPage);
+        // Per-page scale: accounts for unit differences between pdf.js and pdf-lib.
+        // For standard PDFs both report the same dimensions; scale = 1.0.
+        // For PDFs with non-zero MediaBox origin the offset is removed first.
+        const view      = pdfjsPage.view;  // [x0, y0, x1, y1]
+        const pdfjsW    = view[2] - view[0];
+        const pdfjsH    = view[3] - view[1];
+        const { width: plW, height: plH } = pdfPage.getSize();
+        const sx = pdfjsW > 0 ? plW / pdfjsW : 1;
+        const sy = pdfjsH > 0 ? plH / pdfjsH : 1;
+        const ox = view[0]; // MediaBox x-origin (usually 0)
+        const oy = view[1]; // MediaBox y-origin (usually 0)
 
-      // Per-page scale: accounts for unit differences between pdf.js and pdf-lib.
-      // For standard PDFs both report the same dimensions; scale = 1.0.
-      // For PDFs with non-zero MediaBox origin the offset is removed first.
-      const view      = pdfjsPage.view;  // [x0, y0, x1, y1]
-      const pdfjsW    = view[2] - view[0];
-      const pdfjsH    = view[3] - view[1];
-      const { width: plW, height: plH } = pdfPage.getSize();
-      const sx = pdfjsW > 0 ? plW / pdfjsW : 1;
-      const sy = pdfjsH > 0 ? plH / pdfjsH : 1;
-      const ox = view[0]; // MediaBox x-origin (usually 0)
-      const oy = view[1]; // MediaBox y-origin (usually 0)
+        // Filter to items that have actual text
+        const items = content.items.filter(
+          item => item.str && item.str.trim().length > 0
+        );
+        if (!items.length) continue;
 
-      // Filter to items that have actual text
-      const items = content.items.filter(
-        item => item.str && item.str.trim().length > 0
-      );
-      if (!items.length) continue;
+        // ── Build concatenated page text with char→item mapping ───────────────
+        let pageText = '';
+        // itemMap[pos] = { i: itemIndex, c: charIndexWithinItem } | null (for separators)
+        const itemMap = [];
 
-      // ── Build concatenated page text with char→item mapping ───────────────
-      let pageText = '';
-      const itemMap = [];
-
-      for (let i = 0; i < items.length; i++) {
-        const str = items[i].str;
-        for (let j = 0; j < str.length; j++) {
-          itemMap.push(i);
-          pageText += str[j];
-        }
-        itemMap.push(-1);
-        pageText += ' ';
-      }
-
-      // ── Find PII positions ────────────────────────────────────────────────
-      const rawMatches = Anonymizer.findMatchPositions(pageText, options);
-      const matches = options.skipTexts?.length
-        ? rawMatches.filter(m =>
-            !options.skipTexts.some(t => t === pageText.slice(m.start, m.end).toLowerCase())
-          )
-        : rawMatches;
-      if (!matches.length) continue;
-
-      // ── Map matched char positions → text items ───────────────────────────
-      const toRedact = new Map(); // itemIdx → label
-      for (const { start, end, label } of matches) {
-        for (let pos = start; pos < Math.min(end, itemMap.length); pos++) {
-          const idx = itemMap[pos];
-          if (idx >= 0 && !toRedact.has(idx)) {
-            toRedact.set(idx, label);
+        for (let i = 0; i < items.length; i++) {
+          const str = items[i].str;
+          for (let j = 0; j < str.length; j++) {
+            itemMap.push({ i, c: j });
+            pageText += str[j];
           }
+          itemMap.push(null);
+          pageText += ' ';
         }
-      }
 
-      // ── Draw redaction boxes ──────────────────────────────────────────────
-      for (const [idx, label] of toRedact) {
-        const item = items[idx];
+        // ── Find PII positions ────────────────────────────────────────────────
+        const rawMatches = Anonymizer.findMatchPositions(pageText, options);
+        const matches = options.skipTexts?.length
+          ? rawMatches.filter(m =>
+              !options.skipTexts.some(t => t === pageText.slice(m.start, m.end).toLowerCase())
+            )
+          : rawMatches;
+        if (!matches.length) continue;
 
-        // item.width can be 0 for some items (e.g. ligatures, zero-width spaces)
-        // Use a minimum width so we always draw something visible.
-        const rawW = typeof item.width === 'number' ? item.width : 0;
-
-        // The text matrix gives absolute user-space coordinates for the glyph origin.
-        // transform = [a, b, c, d, tx, ty]  where tx/ty are the baseline position.
-        const rawTx = item.transform[4];
-        const rawTy = item.transform[5];
-
-        // Apply MediaBox offset correction + scale to match pdf-lib's coordinate space
-        const tx = (rawTx - ox) * sx;
-        const ty = (rawTy - oy) * sy;
-        const w  = rawW * sx;
-
-        // Height: prefer item.height (bounding-box height above baseline).
-        // Fall back to the Y-scale component of the font matrix (≈ font size).
-        // Enforce a minimum of 8 pt so the box is always visible.
-        const rawH = item.height > 0
-          ? item.height
-          : Math.abs(item.transform[3]);
-        const h = Math.max(rawH > 0 ? rawH * sy : 8, 8);
-
-        // Use a generous padding so the erase layer covers any ascenders/descenders.
-        // rectY is below the baseline; rectY + rectH is well above cap-height.
-        const pad   = Math.max(h * 0.25, 2);
-        const rectX = tx - 1;
-        const rectY = ty - pad;
-        const rectW = (w > 0 ? w : h * 3) + 2; // fallback width for zero-width items
-        const rectH = h + pad * 2;
-
-        if (mode === 'redact') {
-          // Solid black bar – covers everything underneath
-          pdfPage.drawRectangle({
-            x: rectX, y: rectY, width: rectW, height: rectH,
-            color: rgb(0, 0, 0), opacity: 1,
-          });
-        } else {
-          // ── Layer 1: white "erase" rectangle ──────────────────────────────
-          // Drawn slightly LARGER than the annotation box to guarantee the
-          // original text glyphs are covered even if the font has large ascenders.
-          pdfPage.drawRectangle({
-            x: rectX - 1, y: rectY - 1, width: rectW + 2, height: rectH + 2,
-            color: rgb(1, 1, 1), opacity: 1,
-          });
-
-          // ── Layer 2: coloured annotation box ──────────────────────────────
-          pdfPage.drawRectangle({
-            x: rectX, y: rectY, width: rectW, height: rectH,
-            color: rgb(0.93, 0.95, 1.0),
-            borderColor: rgb(0.55, 0.65, 0.85),
-            borderWidth: 0.5,
-            opacity: 1,
-          });
-
-          // ── Layer 3: label text ────────────────────────────────────────────
-          const labelText = mode === 'placeholder'
-            ? '[DATO]'
-            : `[${label.substring(0, 14)}]`;
-
-          const fontSize = Math.max(Math.min(h * 0.65, 7), 3);
-          try {
-            pdfPage.drawText(labelText, {
-              x: rectX + 2,
-              y: ty - fontSize * 0.15,  // align label text at the original baseline
-              size: fontSize,
-              font: helvetica,
-              color: rgb(0.12, 0.32, 0.72),
-              opacity: 1,
-            });
-          } catch (_) {
-            // Encoding edge-case – the box is still drawn
-          }
-        }
-      }
-
-      // Optional: grey bars over header/footer image regions
-      if (options.redactImages) {
-        try {
-          const resources = pdfPage.node.Resources();
-          const xObjs     = resources?.lookupMaybe(PDFLib.PDFName.of('XObject'), PDFLib.PDFDict);
-          let hasImg = false;
-          if (xObjs) {
-            for (const [, ref] of xObjs.entries()) {
-              const xobj = pdfDoc.context.lookupMaybe(ref, PDFLib.PDFDict);
-              if (xobj) {
-                const sub = xobj.lookupMaybe(PDFLib.PDFName.of('Subtype'), PDFLib.PDFName);
-                if (sub?.encodedName === '/Image') { hasImg = true; break; }
-              }
+        // ── Map matched char positions → text items ───────────────────────────
+        // toRedact: Map<itemIdx, { label, c0, c1 }>
+        // c0/c1 = first/last+1 char index within the item that is part of the match
+        const toRedact = new Map();
+        for (const { start, end, label } of matches) {
+          for (let pos = start; pos < Math.min(end, itemMap.length); pos++) {
+            const entry = itemMap[pos];
+            if (!entry) continue;
+            const { i: idx, c } = entry;
+            if (!toRedact.has(idx)) {
+              toRedact.set(idx, { label, c0: c, c1: c + 1 });
+            } else {
+              const info = toRedact.get(idx);
+              if (c < info.c0) info.c0 = c;
+              if (c + 1 > info.c1) info.c1 = c + 1;
             }
           }
-          if (hasImg) {
-            const { width, height } = pdfPage.getSize();
-            const grey = rgb(0.45, 0.45, 0.45);
-            pdfPage.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: grey });
-            pdfPage.drawRectangle({ x: 0, y: 0, width, height: 50, color: grey });
+        }
+
+        // ── Draw redaction boxes ──────────────────────────────────────────────
+        for (const [idx, { label, c0, c1 }] of toRedact) {
+          const item = items[idx];
+          const totalChars = item.str.length;
+          const fStart = totalChars > 0 ? c0 / totalChars : 0;
+          const fEnd   = totalChars > 0 ? c1 / totalChars : 1;
+
+          const rawTx = item.transform[4];
+          const rawTy = item.transform[5];
+          const rawW  = typeof item.width === 'number' ? item.width : 0;
+          const rawH  = item.height > 0 ? item.height : Math.abs(item.transform[3]);
+
+          const tx     = (rawTx - ox) * sx;
+          const ty     = (rawTy - oy) * sy;
+          const itemW  = rawW * sx;
+          const h      = Math.max(rawH > 0 ? rawH * sy : 8, 8);
+
+          // Proportional x-offset and width within the item
+          const matchOffX = fStart * (itemW > 0 ? itemW : 0);
+          const matchW    = itemW > 0
+            ? Math.max((fEnd - fStart) * itemW, 4)
+            : Math.max((c1 - c0) * h * 0.55, 4); // fallback: ~55% of font height per char
+
+          const pad   = Math.max(h * 0.25, 2);
+          const rectX = tx + matchOffX - 1;
+          const rectY = ty - pad;
+          const rectW = matchW + 2;
+          const rectH = h + pad * 2;
+
+          if (mode === 'redact') {
+            // Solid black bar – covers everything underneath
+            pdfPage.drawRectangle({
+              x: rectX, y: rectY, width: rectW, height: rectH,
+              color: rgb(0, 0, 0), opacity: 1,
+            });
+          } else {
+            // ── Layer 1: white "erase" rectangle ──────────────────────────────
+            // Drawn slightly LARGER than the annotation box to guarantee the
+            // original text glyphs are covered even if the font has large ascenders.
+            pdfPage.drawRectangle({
+              x: rectX - 1, y: rectY - 1, width: rectW + 2, height: rectH + 2,
+              color: rgb(1, 1, 1), opacity: 1,
+            });
+
+            // ── Layer 2: coloured annotation box ──────────────────────────────
+            pdfPage.drawRectangle({
+              x: rectX, y: rectY, width: rectW, height: rectH,
+              color: rgb(0.93, 0.95, 1.0),
+              borderColor: rgb(0.55, 0.65, 0.85),
+              borderWidth: 0.5,
+              opacity: 1,
+            });
+
+            // ── Layer 3: label text ────────────────────────────────────────────
+            const labelText = mode === 'placeholder'
+              ? '[DATO]'
+              : `[${label.substring(0, 14)}]`;
+
+            const fontSize = Math.max(Math.min(h * 0.65, 7), 3);
+            try {
+              pdfPage.drawText(labelText, {
+                x: rectX + 2,
+                y: ty - fontSize * 0.15,  // align label text at the original baseline
+                size: fontSize,
+                font: helvetica,
+                color: rgb(0.12, 0.32, 0.72),
+                opacity: 1,
+              });
+            } catch (_) {
+              // Encoding edge-case – the box is still drawn
+            }
           }
-        } catch (_) {}
+        }
+
+        // Optional: grey bars over header/footer image regions
+        if (options.redactImages) {
+          try {
+            const resources = pdfPage.node.Resources();
+            const xObjs     = resources?.lookupMaybe(PDFLib.PDFName.of('XObject'), PDFLib.PDFDict);
+            let hasImg = false;
+            if (xObjs) {
+              for (const [, ref] of xObjs.entries()) {
+                const xobj = pdfDoc.context.lookupMaybe(ref, PDFLib.PDFDict);
+                if (xobj) {
+                  const sub = xobj.lookupMaybe(PDFLib.PDFName.of('Subtype'), PDFLib.PDFName);
+                  if (sub?.encodedName === '/Image') { hasImg = true; break; }
+                }
+              }
+            }
+            if (hasImg) {
+              const { width, height } = pdfPage.getSize();
+              const grey = rgb(0.45, 0.45, 0.45);
+              pdfPage.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: grey });
+              pdfPage.drawRectangle({ x: 0, y: 0, width, height: 50, color: grey });
+            }
+          } catch (_) {}
+        }
+      } catch (pageErr) {
+        console.warn(`Página ${pageIdx + 1}: redacción omitida (${pageErr.message})`);
+        // continue to next page
       }
     }
 
@@ -450,7 +458,9 @@ async function downloadPdfRedacted(file, baseName, options) {
     triggerDownload(blob, `${baseName}_anonimizado.pdf`);
 
   } catch (err) {
-    if (err instanceof RangeError || err.message?.toLowerCase().includes('memory')) {
+    if (fallbackText !== null) {
+      downloadPdf(fallbackText, baseName);
+    } else if (err instanceof RangeError || err.message?.toLowerCase().includes('memory')) {
       alert('El PDF es demasiado grande para procesarlo en el navegador. Descargue en formato TXT como alternativa.');
     } else {
       alert('Error al procesar el PDF: ' + err.message);
