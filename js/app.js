@@ -575,7 +575,7 @@
           .filter(m => excludedMatchIds.has(m.id))
           .map(m => extractedText.slice(m.start, m.end).toLowerCase());
       }
-      Exporters.downloadPdfRedacted(currentFile, baseName(), opts);
+      Exporters.downloadPdfRedacted(currentFile, baseName(), opts, anonymizedText);
     } else {
       Exporters.downloadPdf(anonymizedText, baseName());
     }

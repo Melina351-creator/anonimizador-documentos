@@ -10,6 +10,22 @@ const PATTERNS = {
     // Spanish DNI: 8 digits + letter  |  Spanish NIE: X/Y/Z + 7 digits + letter
     re: /\b([0-9]{8}[A-TRWAGMYFPDXBNJZSQVHLCKE]|[XYZ][0-9]{7}[A-TRWAGMYFPDXBNJZSQVHLCKE])\b/gi,
   },
+  // cbu runs BEFORE cuil/ss: 22-digit CBU cannot be confused with shorter
+  // patterns because word boundaries prevent partial matching.
+  cbu: {
+    label: 'CBU',
+    confidence: 'high',
+    // Argentine CBU: 22 consecutive digits (with optional CBU keyword prefix)
+    re: /\b(?:CBU\s*[:\-#Nº°]?\s*)?\d{22}\b/g,
+  },
+  cbuAlias: {
+    label: 'CBU Alias',
+    confidence: 'high',
+    // Argentine CBU alias: 3 dot-separated alphanumeric segments
+    // Form 1: after "alias:" keyword, any case
+    // Form 2: standalone ALL-CAPS (e.g. NERDO.SOLUTIONS.BBVA)
+    re: /(?<=\balias\s*[:\-]?\s*)[A-Za-z][A-Za-z0-9]{1,21}(?:\.[A-Za-z0-9]{2,22}){2}|\b[A-Z][A-Z0-9]{1,21}(?:\.[A-Z][A-Z0-9]{1,21}){2}\b/gi,
+  },
   // cuil runs BEFORE dniAR so that "20-30343469-7" is matched whole,
   // preventing dniAR's pattern from partially matching the inner digits first.
   cuil: {
@@ -79,7 +95,7 @@ const PATTERNS = {
   address: {
     label: 'Dirección',
     confidence: 'medium',
-    re: /\b(?:calle|c\/|avda?\.?|avenida|plaza|pza\.?|paseo|pso\.?|camino|ronda|travesía|bulevar|bv\.?|pol[ií]gono|urb\.?|urbanización|pasaje|pje\.?|diagonal|diag\.?)\s+[^\n,;]{3,60}(?:,\s*n[oº°]?\s*\d+[^\n,;]{0,30})?/gi,
+    re: /\b(?:calle|c\/|av(?:d(?:a)?|en(?:ida)?)?\.?|plaza|pza\.?|paseo|pso\.?|camino|ronda|travesía|bulevar|bv\.?|pol[ií]gono|urb\.?|urbanización|pasaje|pje\.?|diagonal|diag\.?)\s+[^\n,;]{3,60}(?:,\s*n[oº°]?\s*\d+[^\n,;]{0,30})?/gi,
   },
   postcode: {
     label: 'Código Postal',
@@ -140,7 +156,7 @@ const PATTERNS = {
     //    Captures up to 5 additional capitalized words.
     // 2. Standard company name: 1-4 capitalized words + mandatory legal suffix
     //    (S.A., S.R.L., S.A. de C.V., Asociación Civil, A.C., Inc., …).
-    re: /\b(?:Fundaci[oó]n|Asociaci[oó]n(?:\s+Civil)?|Instituto|Corporaci[oó]n|Hospital|Cl[ií]nica|Escuela|Centro|Consultorio|Laboratorio(?:s)?|Farmacia(?:s)?)\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}(?:\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,5}|\b[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.]|$)/gi,
+    re: /\b(?:Fundaci[oó]n|Asociaci[oó]n(?:\s+Civil)?|Instituto|Corporaci[oó]n|Hospital|Cl[ií]nica|Escuela|Centro|Consultorio|Laboratorio(?:s)?|Farmacia(?:s)?)\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}(?:\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,5}|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.]|$)/gi,
   },
   names: {
     label: 'Nombre',
@@ -150,14 +166,21 @@ const PATTERNS = {
   namesCtx: {
     label: 'Nombre',
     confidence: 'high',
-    re: /(?<=\b(?:paciente|nombre\s+(?:y\s+)?apellido|apellido\s+(?:y\s+)?nombre|nombre\s+completo|apellido(?:s)?|nombre(?:s)?|titular|solicitante|requirente|interesado|firmante|beneficiario|compareciente|declarante|denunciante|imputado|acusado|causante|heredero|propietario|apoderado|asegurado|afiliado)\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){1,4}/gi,
+    re: /(?<=\b(?:paciente|nombre\s+(?:y\s+)?apellido|apellido\s+(?:y\s+)?nombre|nombre\s+completo|apellido(?:s)?|nombre(?:s)?|titular|solicitante|requirente|interesado|firmante|beneficiario|compareciente|declarante|denunciante|imputado|acusado|causante|heredero|propietario|apoderado|asegurado|afiliado|a\s+nombre\s+de|aclaraci[oó]n|at)\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){1,4}/gi,
+  },
+  namesApostrophe: {
+    label: 'Nombre',
+    confidence: 'medium',
+    // Italian/Irish-style surnames: D'Alto, D'Angelo, O'Brien, Dell'Orso
+    // Matches: 1-4 capital letters, optional apostrophe (straight or curly), then rest
+    re: /\b[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{0,3}['\u2019][A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,20}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,20}){0,3}\b/g,
   },
   namesTitleCase: {
     label: 'Nombre',
     confidence: 'low',
     // {1,3} = 1-3 additional words, so minimum 2 words total (e.g. "Francisco Firpo")
     // Stopword filtering applied in findMatchPositions to reduce false positives.
-    re: /\b[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){1,3}\b/g,
+    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){1,3}\b/g,
   },
   namesAllCaps: {
     label: 'Nombre',
@@ -165,7 +188,7 @@ const PATTERNS = {
     // {1,5} = 1-5 additional words, so 2-6 words total.
     // Allows long full names and organization names (e.g. "HERNÁN RAMÍREZ GUTIÉRREZ").
     // Stopword filtering applied in findMatchPositions to reduce false positives.
-    re: /\b[A-ZÁÉÍÓÚÜÑ]{3,20}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,20}){1,5}\b/g,
+    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ]{3,20}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,20}){1,5}\b/g,
   },
 };
 
@@ -195,6 +218,24 @@ const NAME_STOPWORDS = new Set([
   'convenio','resolución','decreto','código','reglamento','norma',
   'servicio','producto','empresa','organización','institución','entidad',
   'ministerio','secretaría','departamento','área','división','unidad',
+  // Spanish articles and determiners (prevent "La Empresa", "El Cliente" etc.)
+  'la','el','los','las','una','un',
+  'esta','este','estas','estos','esa','ese','esas','esos',
+  'dicha','dicho','dichas','dichos',
+  'toda','toda','todos','todas',
+  // Contract roles (PARTE REVELADORA, EMPRESA COLABORADORA, etc.)
+  'parte','cliente','proveedor','contratante','colaboradora','colaborador',
+  'reveladora','revelador','receptora','receptor','emisora','emisor',
+  'locatario','locataria','arrendatario','arrendataria','locador','locadora',
+  'comitente','mandante','mandatario',
+  // Contract boilerplate terms that appear in ALL CAPS
+  'presente','considerando','visto','resultando',
+  'servicios','oferta','propuesta','factura','cobro','pago',
+  'vigencia','rescisión','terminación','vencimiento',
+  'objeto','alcance','plazo','monto','precio','tarifa',
+  // Generic org terms already partially covered, adding more
+  'compañía','asociación','fundación','sociedad','federación',
+  'sindicato','gremio','cámara','consorcio',
 ].map(w => w.toLowerCase()));
 
 /**
