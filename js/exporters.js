@@ -367,11 +367,20 @@ async function downloadPdfRedacted(file, baseName, options, fallbackText = null)
           const itemW  = rawW * sx;
           const h      = Math.max(rawH > 0 ? rawH * sy : 8, 8);
 
-          // Proportional x-offset and width within the item
-          const matchOffX = fStart * (itemW > 0 ? itemW : 0);
-          const matchW    = itemW > 0
-            ? Math.max((fEnd - fStart) * itemW, 4)
-            : Math.max((c1 - c0) * h * 0.55, 4); // fallback: ~55% of font height per char
+          // Proportional x-offset and width within the item.
+          // When item.width is 0 (common in many PDFs) we approximate using
+          // ~55 % of the font height as the average character advance width.
+          // This ensures the box starts at the matched text, not at the item's
+          // left edge (which would cover any preceding label like "RFC:").
+          let matchOffX, matchW;
+          if (itemW > 0) {
+            matchOffX = fStart * itemW;
+            matchW    = Math.max((fEnd - fStart) * itemW, 4);
+          } else {
+            const charW = h * 0.55; // ≈ average advance per character
+            matchOffX   = c0 * charW;
+            matchW      = Math.max((c1 - c0) * charW, 4);
+          }
 
           const pad   = Math.max(h * 0.25, 2);
           const rectX = tx + matchOffX - 1;
