@@ -439,6 +439,20 @@ main {
 [data-theme="dark"] .highlight-excluded { background: #7f1d1d; color: #fca5a5; }
 .highlight-excluded:hover { background: #fecaca; opacity: 1; }
 [data-theme="dark"] .highlight-excluded:hover { background: #991b1b; }
+
+/* Low-confidence matches auto-excluded by default — shown as opt-in suggestions */
+.highlight-suggestion {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+  border-bottom: 2px dashed #9ca3af;
+}
+[data-theme="dark"] .highlight-suggestion { background: #374151; color: #9ca3af; border-bottom-color: #6b7280; }
+.highlight-suggestion:hover { background: #e5e7eb; color: #374151; }
+[data-theme="dark"] .highlight-suggestion:hover { background: #4b5563; color: #d1d5db; }
+
 .highlight-replaced {
   background: #d1fae5;
   color: #065f46;
