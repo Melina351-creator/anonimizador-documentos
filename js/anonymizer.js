@@ -233,9 +233,50 @@ const NAME_STOPWORDS = new Set([
   'servicios','oferta','propuesta','factura','cobro','pago',
   'vigencia','rescisión','terminación','vencimiento',
   'objeto','alcance','plazo','monto','precio','tarifa',
-  // Generic org terms already partially covered, adding more
+  // Generic org terms
   'compañía','asociación','fundación','sociedad','federación',
   'sindicato','gremio','cámara','consorcio',
+  // Org-type trigger words (suppress "Instituto Nacional", "Hospital Federal", etc.
+  // when ALL words are common – private orgs like "Instituto Ramírez" still match)
+  'instituto','hospital','clínica','clinica','escuela','centro',
+  'consultorio','laboratorio','farmacia','corporación','corporacion',
+  // Spanish number words (prevent "CUATRO MILLONES", "QUINIENTOS MIL", etc.)
+  'uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez',
+  'once','doce','trece','catorce','quince','veinte','treinta','cuarenta',
+  'cincuenta','sesenta','setenta','ochenta','noventa',
+  'cien','ciento','doscientos','doscientas','trescientos','trescientas',
+  'cuatrocientos','cuatrocientas','quinientos','quinientas',
+  'seiscientos','seiscientas','setecientos','setecientas',
+  'ochocientos','ochocientas','novecientos','novecientas',
+  'mil','millón','millones','billón','billones','trillón','trillones',
+  // Currency words (prevent "PESOS ARGENTINOS", "DÓLARES AMERICANOS", etc.)
+  'pesos','dólares','dolares','euros','centavos','dólar','dolar','euro',
+  'peso','real','reales','yen','yenes','libra','libras','corona','coronas',
+  'franco','francos','bolívar','bolivar','soles','sol',
+  // Geographic terms (prevent "Buenos Aires", "Ciudad Autónoma", "República Argentina", etc.)
+  'buenos','aires','ciudad','autónoma','autonoma','república','republica',
+  'federal','provincial','municipal','bonaerense',
+  'argentina','argentino','argentinos','argentina','argentinas',
+  'méxico','mexico','mexicano','mexicanos','mexicana','mexicanas',
+  'uruguay','uruguayo','uruguayos','uruguaya','uruguayas',
+  'paraguay','paraguayo','paraguayos','paraguaya','paraguayas',
+  'chile','chileno','chilenos','chilena','chilenas',
+  'perú','peru','peruano','peruanos','peruana','peruanas',
+  'colombia','colombiano','colombianos','colombiana','colombianas',
+  'venezuela','venezolano','venezolanos','venezolana','venezolanas',
+  'brasil','brazil','brasileño','brasilena',
+  'españa','espana','español','espanol','española','espanola','españoles',
+  'estados','unidos',
+  'nacional','regional','estadual','distrital',
+  // Contract defined terms (prevent "Las Partes", "Datos Personales", "Fecha Efectiva", etc.)
+  'partes','parte','datos','personales','información','informacion',
+  'confidencial','efectiva','efectivo','vigente',
+  'adicional','siguiente','respectiva','respectivo',
+  'referida','referido','indicada','indicado','mencionada','mencionado',
+  'digital','salud','seguridad','privacidad','protección','proteccion',
+  // Common prepositions/conjunctions that land in two-word TitleCase matches
+  'con','por','para','sin','sobre','bajo','ante','tras','según','segun',
+  'entre','hasta','desde','durante','mediante','excepto','salvo',
 ].map(w => w.toLowerCase()));
 
 /**
@@ -304,6 +345,23 @@ function _allStopwords(matchedText) {
 }
 
 /**
+ * Returns true when the character immediately preceding index is an opening
+ * quote (straight or typographic).  Used to suppress defined contract terms
+ * like "Las Partes" or "Fecha Efectiva" that appear inside quotation marks.
+ */
+function _isPrecededByQuote(text, index) {
+  if (index === 0) return false;
+  return /["'"«\u201C\u2018\u00AB]/.test(text[index - 1]);
+}
+
+// Pattern keys whose matches should be discarded when preceded by a quote char
+// (the term is a defined contract label, not a real person/company name).
+// namesCtx is excluded here because its lookbehind context is already strong.
+const QUOTE_SENSITIVE = new Set([
+  'names', 'namesApostrophe', 'namesTitleCase', 'namesAllCaps',
+]);
+
+/**
  * Find PII match positions (start/end indices) in a text string without replacing.
  * Used by the interactive preview and PDF redaction engine.
  * @returns {Array<{start, end, label, confidence, id}>}
@@ -317,9 +375,14 @@ function findMatchPositions(text, options = {}) {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(text)) !== null) {
-      // Suppress generic name patterns when the entire match is role/title stopwords
-      if ((key === 'namesTitleCase' || key === 'namesAllCaps') &&
+      // 1. Suppress generic name patterns when every word is a known stopword
+      if ((key === 'namesTitleCase' || key === 'namesAllCaps' || key === 'company') &&
           _allStopwords(m[0])) {
+        continue;
+      }
+      // 2. Suppress name matches that are quoted contract-defined terms
+      //    e.g.  la "EMPRESA"  /  "Las Partes"  /  "Fecha Efectiva"
+      if (QUOTE_SENSITIVE.has(key) && _isPrecededByQuote(text, m.index)) {
         continue;
       }
       matches.push({ start: m.index, end: m.index + m[0].length, label, confidence: confidence || 'medium' });

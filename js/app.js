@@ -368,6 +368,11 @@
   /**
    * Render the original text with each detected PII item wrapped in a clickable
    * <mark> so the user can toggle false-positive exclusions before confirming.
+   *
+   * Visual states:
+   *  • highlight-found    – included (high/medium confidence), click to exclude
+   *  • highlight-excluded – manually excluded, click to restore
+   *  • highlight-suggestion – low-confidence, auto-excluded by default, click to include
    */
   function renderClickableMatches(text, matches, excludedIds) {
     const sorted = [...matches].sort((a, b) => a.start - b.start);
@@ -382,10 +387,17 @@
     for (const m of deduped) {
       html += escapeHtml(text.slice(pos, m.start));
       const ex  = excludedIds.has(m.id);
-      const cls = ex ? 'highlight-excluded' : 'highlight-found highlight-pii-click';
-      const tip = ex
-        ? `${m.label} — excluido (clic para volver a incluir)`
-        : `${m.label} — clic para marcar como falso positivo`;
+      let cls, tip;
+      if (ex && m.confidence === 'low') {
+        cls = 'highlight-suggestion highlight-pii-click';
+        tip = `${m.label} — confianza baja, no activo. Clic para incluir`;
+      } else if (ex) {
+        cls = 'highlight-excluded highlight-pii-click';
+        tip = `${m.label} — excluido (clic para volver a incluir)`;
+      } else {
+        cls = 'highlight-found highlight-pii-click';
+        tip = `${m.label} — clic para marcar como falso positivo`;
+      }
       html += `<mark class="${cls}" data-match-id="${m.id}" title="${escapeHtml(tip)}">${escapeHtml(text.slice(m.start, m.end))}</mark>`;
       pos = m.end;
     }
@@ -409,9 +421,9 @@
     if (confEl && confidenceStats && total > 0) {
       confEl.innerHTML = '';
       const { high = 0, medium = 0, low = 0 } = confidenceStats;
-      if (high)   { const s = document.createElement('span'); s.className = 'conf-chip conf-high';   s.textContent = `${high} alta`;          confEl.appendChild(s); }
-      if (medium) { const s = document.createElement('span'); s.className = 'conf-chip conf-medium'; s.textContent = `${medium} media`;        confEl.appendChild(s); }
-      if (low)    { const s = document.createElement('span'); s.className = 'conf-chip conf-low';    s.textContent = `${low} baja — revisar`; confEl.appendChild(s); }
+      if (high)   { const s = document.createElement('span'); s.className = 'conf-chip conf-high';   s.textContent = `${high} alta`;                        confEl.appendChild(s); }
+      if (medium) { const s = document.createElement('span'); s.className = 'conf-chip conf-medium'; s.textContent = `${medium} media`;                      confEl.appendChild(s); }
+      if (low)    { const s = document.createElement('span'); s.className = 'conf-chip conf-low';    s.textContent = `${low} baja — sugerencias (no activas)`; confEl.appendChild(s); }
       confEl.classList.remove('hidden');
     } else if (confEl) {
       confEl.classList.add('hidden');
@@ -449,7 +461,8 @@
       const options = getOptions();
       allMatches = Anonymizer.findMatchPositions(extractedText, options)
         .map((m, i) => ({ ...m, id: i }));
-      excludedMatchIds = new Set();
+      // Low-confidence matches are opt-in: excluded by default, shown as gray suggestions
+      excludedMatchIds = new Set(allMatches.filter(m => m.confidence === 'low').map(m => m.id));
       const { result, stats, total, confidenceStats } = Anonymizer.anonymizeFromPositions(
         extractedText, allMatches, excludedMatchIds, options.mode
       );
@@ -546,7 +559,7 @@
     const opts = getOptions();
     allMatches = Anonymizer.findMatchPositions(extractedText, opts)
       .map((m, i) => ({ ...m, id: i }));
-    excludedMatchIds = new Set();
+    excludedMatchIds = new Set(allMatches.filter(m => m.confidence === 'low').map(m => m.id));
     const { result, stats, total, confidenceStats } = Anonymizer.anonymizeFromPositions(
       extractedText, allMatches, excludedMatchIds, opts.mode
     );
