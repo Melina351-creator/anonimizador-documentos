@@ -143,7 +143,9 @@ async function downloadDocx(text, baseName) {
 }
 
 /**
- * Download as PDF using jsPDF (for non-PDF source files).
+ * Download as PDF using jsPDF (for non-PDF source files, or as fallback).
+ * Preserves paragraph structure: each \n becomes a line break, consecutive
+ * empty lines become extra vertical spacing (paragraph gap).
  */
 function downloadPdf(text, baseName) {
   try {
@@ -157,21 +159,20 @@ function downloadPdf(text, baseName) {
     const pageWidth    = doc.internal.pageSize.getWidth();
     const pageHeight   = doc.internal.pageSize.getHeight();
     const maxWidth     = pageWidth - marginLeft - marginRight;
-    const lineHeight   = 6;
+    const lineHeight   = 5.5;
+    const paraGap      = 2.5; // extra space for blank lines
 
     doc.setFontSize(9);
     doc.setTextColor(150);
-    doc.text('Documento anonimizado – procesado localmente en el navegador', marginLeft, 12);
+    doc.text('Documento anonimizado \u2013 procesado localmente en el navegador', marginLeft, 12);
     doc.setDrawColor(200);
     doc.line(marginLeft, 15, pageWidth - marginRight, 15);
     doc.setFontSize(10);
     doc.setTextColor(30);
 
-    const safeText = normalizeForPdf(text);
     let y = marginTop;
-    const lines = doc.splitTextToSize(safeText, maxWidth);
 
-    for (const line of lines) {
+    function addLine(line) {
       if (y + lineHeight > pageHeight - marginBottom) {
         doc.addPage();
         y = marginTop;
@@ -180,13 +181,46 @@ function downloadPdf(text, baseName) {
       y += lineHeight;
     }
 
-    doc.save(`${baseName}_anonimizado.pdf`);
+    const safeText = normalizeForPdf(text);
+
+    for (const rawLine of safeText.split('\n')) {
+      if (!rawLine.trim()) {
+        // Blank line → paragraph gap (no new page needed for just spacing)
+        y = Math.min(y + paraGap, pageHeight - marginBottom - lineHeight);
+        continue;
+      }
+      // Wrap content lines that exceed maxWidth
+      const wrapped = doc.splitTextToSize(rawLine, maxWidth);
+      for (const segment of wrapped) {
+        addLine(segment);
+      }
+    }
+
+    // Get bytes and validate before triggering download
+    const pdfBuffer = doc.output('arraybuffer');
+    _validateAndDownload(new Uint8Array(pdfBuffer), `${baseName}_anonimizado.pdf`);
   } catch (err) {
     alert('Error al generar el PDF: ' + err.message);
   }
 }
 
-// ── PDF in-place redaction helpers ────────────────────────────────────────────
+// ── PDF helpers ───────────────────────────────────────────────────────────────
+
+/**
+ * Validate that `bytes` is a well-formed PDF (starts with %PDF-) and trigger
+ * the browser download.  Throws if the bytes are not a valid PDF so callers
+ * can fall back to jsPDF regeneration.
+ */
+function _validateAndDownload(bytes, filename) {
+  // PDF header: 0x25 0x50 0x44 0x46 0x2D  (%PDF-)
+  if (bytes.length < 1024 ||
+      bytes[0] !== 0x25 || bytes[1] !== 0x50 ||
+      bytes[2] !== 0x44 || bytes[3] !== 0x46) {
+    throw new Error('PDF generado inválido: el archivo no comienza con %PDF-');
+  }
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  triggerDownload(blob, filename);
+}
 
 /**
  * Wrap a page's existing content stream(s) in a save/restore graphics-state
@@ -463,11 +497,13 @@ async function downloadPdfRedacted(file, baseName, options, fallbackText = null)
     }
 
     const pdfBytes = await pdfDoc.save();
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    triggerDownload(blob, `${baseName}_anonimizado.pdf`);
+    // _validateAndDownload throws if the output is not a valid PDF,
+    // which causes the catch block below to run the jsPDF fallback.
+    _validateAndDownload(pdfBytes, `${baseName}_anonimizado.pdf`);
 
   } catch (err) {
     if (fallbackText !== null) {
+      console.warn('pdf-lib falló, usando fallback jsPDF:', err.message);
       downloadPdf(fallbackText, baseName);
     } else if (err instanceof RangeError || err.message?.toLowerCase().includes('memory')) {
       alert('El PDF es demasiado grande para procesarlo en el navegador. Descargue en formato TXT como alternativa.');
