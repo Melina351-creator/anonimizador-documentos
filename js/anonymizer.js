@@ -97,6 +97,15 @@ const PATTERNS = {
     confidence: 'medium',
     re: /\b(?:calle|c\/|av(?:d(?:a)?|en(?:ida)?)?\.?|plaza|pza\.?|paseo|pso\.?|camino|ronda|travesía|bulevar|bv\.?|pol[ií]gono|urb\.?|urbanización|pasaje|pje\.?|diagonal|diag\.?)\s+[^\n,;]{3,60}(?:,\s*n[oº°]?\s*\d+[^\n,;]{0,30})?/gi,
   },
+  // Addresses without a street-type prefix: "Cerrito 517, Montevideo"
+  // Confidence low (opt-in) because without a prefix the pattern can also match
+  // contract references like "Artículo 32".  The comma+city requirement is
+  // mandatory to reduce false positives — bare "Cerrito 517" is not matched.
+  addressInline: {
+    label: 'Dirección',
+    confidence: 'low',
+    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ\d])[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{3,23}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{3,23}){0,2}\s+\d{2,5}(?:\s*,\s*[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{3,23}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{3,23}){0,2})/g,
+  },
   postcode: {
     label: 'Código Postal',
     confidence: 'medium',
@@ -150,13 +159,15 @@ const PATTERNS = {
   company: {
     label: 'Empresa',
     confidence: 'medium',
-    // Two alternatives:
+    // Three alternatives:
     // 1. Organization names beginning with a recognised entity-type keyword
-    //    (Fundación, Asociación, Instituto, Hospital…) – no mandatory legal suffix.
-    //    Captures up to 5 additional capitalized words.
-    // 2. Standard company name: 1-4 capitalized words + mandatory legal suffix
-    //    (S.A., S.R.L., S.A. de C.V., Asociación Civil, A.C., Inc., …).
-    re: /\b(?:Fundaci[oó]n|Asociaci[oó]n(?:\s+Civil)?|Instituto|Corporaci[oó]n|Hospital|Cl[ií]nica|Escuela|Centro|Consultorio|Laboratorio(?:s)?|Farmacia(?:s)?)\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}(?:\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,5}|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.]|$)/gi,
+    //    (Fundación, Instituto, Hospital…) – no mandatory legal suffix.
+    // 2. Trade-name followed by parenthetical legal entity:
+    //    "ÜMA (Deksia S.A)"  /  "Marca (Razón Social S.R.L.)"
+    //    Handles Unicode first chars (Ü, Á, etc.) and the closing ")".
+    // 3. Standard company: 1-4 capitalized words + mandatory legal suffix.
+    //    Trailing lookahead allows ")" so the suffix inside parens is detected too.
+    re: /\b(?:Fundaci[oó]n|Asociaci[oó]n(?:\s+Civil)?|Instituto|Corporaci[oó]n|Hospital|Cl[ií]nica|Escuela|Centro|Consultorio|Laboratorio(?:s)?|Farmacia(?:s)?)\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}(?:\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,5}|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,2}\s*\(\s*[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)\.?\s*\)|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.)]|$)/gi,
   },
   names: {
     label: 'Nombre',
