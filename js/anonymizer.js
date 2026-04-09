@@ -168,7 +168,43 @@ const PATTERNS = {
     confidence: 'high',
     re: /(?<=\bmatr[ií]cula\b[^0-9]{0,20})\d{4,10}\b/gi,
   },
-  // company runs BEFORE generic name patterns so "Deksia México S.A." is matched
+  // nit: Colombian NIT (Número de Identificación Tributaria)
+  nit: {
+    label: 'NIT',
+    confidence: 'high',
+    re: /\b(?:NIT|N\.I\.T\.?)\s*(?:N[ºo°]\.?\s*|[#:\-]\s*)?\d{3}\.?\d{3}\.?\d{3}[\-]\d\b|\b(?:NIT|N\.I\.T\.?)\s*(?:N[ºo°]\.?\s*|[#:\-]\s*)?\d{9,10}[\-]?\d?\b/gi,
+  },
+  // cedula: Colombian/Venezuelan cédula de ciudadanía / identidad
+  cedula: {
+    label: 'Cédula',
+    confidence: 'high',
+    re: /\b(?:c[eé]dula(?:\s+de\s+(?:ciudadan[ií]a|identidad|extranjer[ií]a))?|C\.?C\.?|C\.?E\.?)\s*(?:N[ºo°]\.?\s*|[#:\-]\s*)?\d[\d.]{5,15}\d\b/gi,
+  },
+  // rutLong: Uruguayan RUT without dash (12+ digit number after "Rol Único Tributario" or "RUT" keyword)
+  rutLong: {
+    label: 'RUT',
+    confidence: 'high',
+    re: /(?<=\b(?:R(?:ol|egistro)\s+[UÚú]nico\s+Tributario|RUT|R\.U\.T\.?)\s*(?:N[ºo°]\.?\s*|[#:\-]\s*)?)\d{10,14}\b/gi,
+  },
+  // bankAccount: bank account numbers after contextual keywords
+  bankAccount: {
+    label: 'Cuenta Bancaria',
+    confidence: 'high',
+    re: /(?<=\b(?:n[uú]mero\s+de\s+(?:cuenta|cta)|cuenta(?:\s+(?:bancaria|corriente|de\s+ahorro))?|cta|n[oº°]?\s*(?:de\s+)?cta)\s*[.:\-#Nº°]?\s*)\d[\d\-\s]{6,24}\d\b/gi,
+  },
+  // swift: SWIFT/BIC bank codes (8 or 11 alphanumeric chars)
+  swift: {
+    label: 'SWIFT',
+    confidence: 'high',
+    re: /(?<=\b(?:swift|bic|swift\/bic|código\s+swift|codigo\s+swift)\s*[:\-]?\s*)[A-Z0-9]{8,11}\b/gi,
+  },
+  // companyAlias: company names defined with "en adelante" pattern
+  // e.g., (en adelante el "PRESTADOR" y/o "ÜMA") or (en adelante "FARMATODO")
+  companyAlias: {
+    label: 'Empresa',
+    confidence: 'high',
+    re: /(?<=en\s+adelante\s+(?:el\s+|la\s+)?[""«']\s*(?:(?:PRESTADOR|CLIENTE|PROVEEDOR|CONTRATANTE|LICENCIANTE|LICENCIATARIO)\s*[""\u201D»']\s*y\/o\s*[""«'\u201C]\s*)?)[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{0,25}(?:[ \t]+[A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}(?=\s*[""\u201D»'])/gi,
+  },
   // whole (with its legal suffix) and not partially consumed as a person's name.
   company: {
     label: 'Empresa',
@@ -192,10 +228,9 @@ const PATTERNS = {
   namesCtx: {
     label: 'Nombre',
     confidence: 'high',
-    // \b after the keyword group ensures the keyword is a complete word, preventing
-    // "titular" from matching inside "titularidad". Uses [ \t]+ in name capture
-    // to prevent crossing line boundaries.
-    re: /(?<=\b(?:paciente|nombre\s+(?:y\s+)?apellido|apellido\s+(?:y\s+)?nombre|nombre\s+completo|apellido(?:s)?|nombre(?:s)?|titular|solicitante|requirente|interesado|firmante|beneficiario|compareciente|declarante|denunciante|imputado|acusado|causante|heredero|propietario|apoderado|asegurado|afiliado|a\s+nombre\s+de|aclaraci[oó]n|atenci[oó]n)\b\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:[ \t]+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){1,4}/gi,
+    // \b after the keyword group ensures the keyword is a complete word.
+    // Uses [ \t]+ in name capture to prevent crossing line boundaries.
+    re: /(?<=\b(?:paciente|nombre\s+(?:y\s+)?apellido|apellido\s+(?:y\s+)?nombre|nombre\s+completo|apellido(?:s)?|nombre(?:s)?|titular|solicitante|requirente|interesado|firmante|beneficiario|compareciente|declarante|denunciante|imputado|acusado|causante|heredero|propietario|apoderado|asegurado|afiliado|a\s+nombre\s+de|aclaraci[oó]n|atenci[oó]n|si\s+es\s+a[l]?)\b\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:[ \t]+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){1,5}/gi,
   },
   namesApostrophe: {
     label: 'Nombre',
@@ -333,6 +368,18 @@ const NAME_STOPWORDS = new Set([
   'software','softwares','aplicación','aplicacion','plataforma',
   'desarrollo','implementación','implementacion','mantenimiento',
   'soporte','consultoría','consultoria','asesoría','asesoria',
+  // Words that cause false positives in contract text
+  'uso','licencia','entre','otro','otra','otros','otras',
+  'deberá','debera','podrá','podra','tendrá','tendra',
+  'ingresar','acceder','utilizar','operar','gestionar',
+  'apoderado','apoderada','representante','legal','legales',
+  'prestador','contratista','beneficiaria','cedente','cesionario',
+  'implementación','implementacion','descripción','descripcion',
+  'fases','fase','etapa','etapas','conformidad','establecido',
+  'anexo','servicios','contrato','acuerdo',
+  'carrera','avenida','calle','piso','oficina',
+  'bogotá','bogota','montevideo','lima','santiago','quito',
+  'caracas','medellín','medellin','barranquilla','cali',
 ].map(w => w.toLowerCase()));
 
 /**
@@ -500,6 +547,38 @@ function findMatchPositions(text, options = {}) {
       if ((key === 'names' || key === 'namesCtx' || key === 'namesTitleCase' || key === 'namesAllCaps') &&
           m[0].trim().length < 5) {
         continue;
+      }
+      // 6. For company matches: trim leading stopwords so "USO DE SOFTWARE Entre DEKSIA S.A."
+      //    becomes "DEKSIA S.A." — only keep the actual company name + legal suffix.
+      if (key === 'company') {
+        const words = m[0].split(/\s+/);
+        // Find the legal suffix position
+        const suffixIdx = words.findIndex(w => /^(?:S\.A|S\.R|S\.C|S\.de|Ltda|Inc|Corp|GmbH|B\.V|LLC|LLP|PLC|A\.C)/i.test(w));
+        if (suffixIdx > 0) {
+          // Walk backwards from suffix to find where the real company name starts
+          let nameStart = suffixIdx - 1;
+          while (nameStart > 0 && !NAME_STOPWORDS.has(words[nameStart - 1].toLowerCase().replace(/[.,;:()]/g, ''))) {
+            nameStart--;
+          }
+          if (nameStart > 0) {
+            // Recalculate start position by counting chars of trimmed words
+            const trimmedText = words.slice(nameStart).join(' ');
+            const newStart = m.index + m[0].indexOf(trimmedText);
+            if (newStart > m.index) {
+              matches.push({ start: newStart, end: m.index + m[0].length, label, confidence: confidence || 'medium' });
+              continue;
+            }
+          }
+        }
+      }
+      // 7. For namesCtx: suppress if the captured text (after the keyword) is all
+      //    lowercase words or stopwords — real names have capitalized words
+      if (key === 'namesCtx') {
+        const capturedWords = m[0].trim().split(/\s+/);
+        const hasProperNoun = capturedWords.some(w =>
+          /^[A-ZÁÉÍÓÚÜÑ]/.test(w) && !NAME_STOPWORDS.has(w.toLowerCase())
+        );
+        if (!hasProperNoun) continue;
       }
       matches.push({ start: m.index, end: m.index + m[0].length, label, confidence: confidence || 'medium' });
     }
