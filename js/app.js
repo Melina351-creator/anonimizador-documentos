@@ -345,6 +345,7 @@
       birthdateText:  $('chk-dates').checked,
       iban:           $('chk-iban').checked,
       bankAccount:    $('chk-iban').checked,
+      clabe:          $('chk-iban').checked,
       swift:          $('chk-iban').checked,
       ss:             $('chk-ss').checked,
       plate:          $('chk-plate').checked,
