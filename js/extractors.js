@@ -145,13 +145,83 @@ async function extractPdfDigital(file) {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const pageText = content.items.map(item => item.str).join(' ');
+    // Position-aware text reconstruction:
+    // PDF.js returns text items with transform[4]=x, transform[5]=y positions.
+    // We use these to detect line breaks and proper word spacing instead of
+    // naively joining with spaces (which breaks words like "Better fl y").
+    const items = content.items.filter(it => it.str);
+    if (!items.length) { parts.push(''); continue; }
+
+    // Sort by Y descending (top of page first), then X ascending (left to right)
+    items.sort((a, b) => {
+      const ay = a.transform[5], by = b.transform[5];
+      const ax = a.transform[0] || 0, bx = b.transform[0] || 0;
+      // Items on the same line have similar Y values (within font-height tolerance)
+      const lineThreshold = Math.max(a.height || 8, b.height || 8) * 0.5;
+      if (Math.abs(ay - by) > lineThreshold) return by - ay; // higher Y = earlier line
+      return ax - bx; // same line: left to right
+    });
+
+    let pageText = '';
+    let prevItem = null;
+
+    for (const item of items) {
+      if (!prevItem) {
+        pageText += item.str;
+        prevItem = item;
+        continue;
+      }
+
+      const prevY = prevItem.transform[5];
+      const currY = item.transform[5];
+      const lineThreshold = Math.max(prevItem.height || 8, item.height || 8) * 0.5;
+
+      if (Math.abs(prevY - currY) > lineThreshold) {
+        // New line
+        pageText += '\n' + item.str;
+      } else {
+        // Same line — check horizontal gap to decide space vs concatenation
+        const prevX = prevItem.transform[4] || 0;
+        const prevWidth = prevItem.width || 0;
+        const currX = item.transform[4] || 0;
+        const gap = currX - (prevX + prevWidth);
+        // Estimate space width as ~25% of font height
+        const spaceWidth = (item.height || 8) * 0.25;
+
+        if (gap > spaceWidth * 1.5) {
+          // Clear gap → real space between words
+          pageText += ' ' + item.str;
+        } else if (gap < -spaceWidth) {
+          // Overlap or very negative gap → likely same word, different run
+          pageText += item.str;
+        } else if (gap < spaceWidth * 0.3) {
+          // Very small gap → fragments of the same word (e.g. "Bet" + "terfly")
+          pageText += item.str;
+        } else {
+          // Moderate gap → space
+          pageText += ' ' + item.str;
+        }
+      }
+      prevItem = item;
+    }
+
     parts.push(pageText);
   }
 
   const fullText = parts.join('\n\n');
-  const isScanned = fullText.trim().length < 80 * pdf.numPages; // heuristic
-  return { text: fullText, isScanned, numPages: pdf.numPages };
+  // Post-process: fix common PDF extraction artifacts
+  const cleaned = fullText
+    // Remove soft hyphens and zero-width chars
+    .replace(/[\u00AD\u200B\u200C\u200D\uFEFF]/g, '')
+    // Collapse multiple spaces into one (but preserve newlines)
+    .replace(/[^\S\n]+/g, ' ')
+    // Fix spaces inserted mid-word before common suffixes
+    .replace(/ (ción|sión|mente|idad|ario|ario|ería|ismo|ista|ble|dad|dor|dora|tivo|tiva)\b/g, '$1')
+    // Trim lines
+    .replace(/^ +| +$/gm, '');
+
+  const isScanned = cleaned.trim().length < 80 * pdf.numPages; // heuristic
+  return { text: cleaned, isScanned, numPages: pdf.numPages };
 }
 
 /**
