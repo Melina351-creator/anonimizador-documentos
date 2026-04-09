@@ -94,16 +94,20 @@ const PATTERNS = {
   },
   // addressCtx detects the address VALUE after common field labels.
   // Requires the captured text to contain at least a number (street number, floor, etc.)
-  // to avoid capturing generic text that follows "domicilio" in legal clauses.
+  // Stops at sentence boundaries (period + space + uppercase letter).
   addressCtx: {
     label: 'Dirección',
     confidence: 'medium',
-    re: /(?<=\b(?:domicilio(?:\s+(?:social|legal|fiscal|real|especial|constituido))?\s*(?:(?:en|sito\s+en|ubicado\s+en)\s*)?|direcci[oó]n(?:\s+(?:postal|fiscal|legal))?\s*|residencia|domiciliad[ao](?:\s+en)?)\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ][^\n;]{2,40}\d+[^\n;]{0,60}(?:,\s*[^\n;,]{1,40}){0,3}/gi,
+    re: /(?<=\b(?:domicilio(?:\s+(?:social|legal|fiscal|real|especial|constituido))?\s*(?:(?:en|sito\s+en|ubicado\s+en)\s*)?|direcci[oó]n(?:\s+(?:postal|fiscal|legal))?\s*|residencia|domiciliad[ao](?:\s+en)?)\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ](?:[^\n;.]|\.(?!\s[A-ZÁÉÍÓÚÜÑ])){2,40}\d+(?:[^\n;.]|\.(?!\s[A-ZÁÉÍÓÚÜÑ])){0,80}/gi,
   },
   address: {
     label: 'Dirección',
     confidence: 'medium',
-    re: /\b(?:calle|c\/|av(?:d(?:a)?|en(?:ida)?)?\.?|plaza|pza\.?|paseo|pso\.?|camino|ronda|travesía|bulevar|bv\.?|pol[ií]gono|urb\.?|urbanización|pasaje|pje\.?|diagonal|diag\.?)\s+[^\n,;]{3,60}(?:,\s*n[oº°]?\s*\d+[^\n,;]{0,30})?/gi,
+    // Captures: street prefix + content. Stops at sentence boundaries.
+    // The pattern matches chars that are either:
+    //   - not a period, newline, or semicolon, OR
+    //   - a period NOT followed by whitespace+uppercase (i.e., abbreviation periods like "C.P.")
+    re: /\b(?:calle|c\/|av(?:d(?:a)?|en(?:ida)?)?\.?|plaza|pza\.?|paseo|pso\.?|camino|ronda|travesía|bulevar|bv\.?|pol[ií]gono|urb\.?|urbanización|pasaje|pje\.?|diagonal|diag\.?)\s+(?:[^\n;.]|\.(?!\s[A-ZÁÉÍÓÚÜÑ]))+/gi,
   },
   // Addresses without a street-type prefix: "Cerrito 517, Montevideo"
   // Confidence low (opt-in) because without a prefix the pattern can also match
