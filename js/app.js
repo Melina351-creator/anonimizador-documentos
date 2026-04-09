@@ -321,6 +321,7 @@
       namesCtx:       $('chk-names').checked,
       namesTitleCase: $('chk-names').checked,
       namesAllCaps:   $('chk-names').checked,
+      namesPartyList: $('chk-names').checked,
       namesApostrophe: $('chk-names').checked,
       company:        $('chk-company').checked,
       companyAlias:   $('chk-company').checked,
