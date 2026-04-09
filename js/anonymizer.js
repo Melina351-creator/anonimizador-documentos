@@ -205,17 +205,22 @@ const PATTERNS = {
     confidence: 'high',
     re: /(?<=en\s+adelante\s+(?:el\s+|la\s+)?[""«']\s*(?:(?:PRESTADOR|CLIENTE|PROVEEDOR|CONTRATANTE|LICENCIANTE|LICENCIATARIO)\s*[""\u201D»']\s*y\/o\s*[""«'\u201C]\s*)?)[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{0,25}(?:[ \t]+[A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}(?=\s*[""\u201D»'])/gi,
   },
+  // umaAlias: ÜMA / UMA brand — always anonymized in all variants
+  umaAlias: {
+    label: 'Empresa',
+    confidence: 'high',
+    // \b doesn't work with Ü (non-ASCII), so we use a lookbehind for word boundary
+    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ\w])[ÜüUu]MA(?:\s+(?:Salud|Health))?(?![A-Za-záéíóúüñÁÉÍÓÚÜÑ\w])/g,
+  },
   // whole (with its legal suffix) and not partially consumed as a person's name.
   company: {
     label: 'Empresa',
     confidence: 'medium',
-    // Two alternatives (removed the loose org-keyword alternative that caused false positives):
-    // 1. Trade-name followed by parenthetical legal entity:
-    //    "ÜMA (Deksia S.A)"  /  "Marca (Razón Social S.R.L.)"
-    // 2. Standard company: 1-4 capitalized words + mandatory legal suffix.
-    //    The legal suffix (S.A., S.R.L., etc.) is REQUIRED — this prevents matching
-    //    generic phrases like "centro de trabajo" or "asociación entre ellas".
-    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,2}\s*\(\s*[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)\.?\s*\)|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.)]|$)/gi,
+    // Two alternatives:
+    // 1. Trade-name followed by parenthetical legal entity
+    // 2. Standard company: capitalized words + mandatory legal suffix
+    //    Now accepts both "S.A. DE C.V." and "SA DE CV" (without periods)
+    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,2}\s*\(\s*[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.?A\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.?(?:de\s+)?R\.?L\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.A\.S\.?|S\.?R\.?L\.?|S\.?A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)\.?\s*\)|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.?A\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.?(?:de\s+)?R\.?L\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.A\.S\.?|S\.?R\.?L\.?|S\.?A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.)]|$)/gi,
   },
   names: {
     label: 'Nombre',
@@ -250,8 +255,10 @@ const PATTERNS = {
     label: 'Nombre',
     confidence: 'low',
     // Context-aware: only match ALL-CAPS sequences after legal context phrases.
-    // Uses [ \t]+ instead of \s+ to prevent crossing line boundaries.
-    re: /(?<=\b(?:representad[ao]?\s+(?:en\s+este\s+acto\s+)?por|en\s+adelante|a\s+favor\s+de|a\s+nombre\s+de|suscrit[ao]\s+por|firmad[ao]\s+por|atenci[oó]n:?)\s+)[A-ZÁÉÍÓÚÜÑ]{3,20}(?:[ \t]+[A-ZÁÉÍÓÚÜÑ]{3,20}){1,5}\b/gi,
+    // Uses \s+ to allow crossing line breaks (common in PDF extraction where
+    // "ESTE\nACTO POR FRANCISCO NEFTALI MORALES\nGUERRERO" spans multiple lines).
+    // The strict lookbehind context prevents false positives even with \s+.
+    re: /(?<=\b(?:representad[ao]?\s+(?:en\s+este\s+acto\s+)?por|(?:ESTE\s+)?ACTO\s+POR|en\s+adelante|a\s+favor\s+de|a\s+nombre\s+de|suscrit[ao]\s+por|firmad[ao]\s+por|atenci[oó]n:?)\s+)[A-ZÁÉÍÓÚÜÑ]{3,20}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,20}){1,5}\b/gi,
   },
 };
 
