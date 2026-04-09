@@ -324,6 +324,7 @@
       namesApostrophe: $('chk-names').checked,
       company:        $('chk-company').checked,
       companyAlias:   $('chk-company').checked,
+      umaAlias:       $('chk-company').checked,
       dni:            $('chk-dni').checked,
       dniAR:          $('chk-dni').checked,
       nif:            $('chk-dni').checked,
