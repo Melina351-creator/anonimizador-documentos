@@ -94,7 +94,7 @@ const PATTERNS = {
   },
   // addressCtx detects the address VALUE after common field labels.
   // Requires the captured text to contain at least a number (street number, floor, etc.)
-  // Stops at sentence boundaries (period + space + uppercase letter).
+  // Stops at sentence boundaries. Post-processing in findMatchPositions trims legal keywords.
   addressCtx: {
     label: 'Dirección',
     confidence: 'medium',
@@ -103,10 +103,6 @@ const PATTERNS = {
   address: {
     label: 'Dirección',
     confidence: 'medium',
-    // Captures: street prefix + content. Stops at sentence boundaries.
-    // The pattern matches chars that are either:
-    //   - not a period, newline, or semicolon, OR
-    //   - a period NOT followed by whitespace+uppercase (i.e., abbreviation periods like "C.P.")
     re: /\b(?:calle|c\/|av(?:d(?:a)?|en(?:ida)?)?\.?|plaza|pza\.?|paseo|pso\.?|camino|ronda|travesía|bulevar|bv\.?|pol[ií]gono|urb\.?|urbanización|pasaje|pje\.?|diagonal|diag\.?)\s+(?:[^\n;.]|\.(?!\s[A-ZÁÉÍÓÚÜÑ]))+/gi,
   },
   // Addresses without a street-type prefix: "Cerrito 517, Montevideo"
@@ -244,6 +240,13 @@ const PATTERNS = {
     // Uses [ \t]+ in name capture to prevent crossing line boundaries.
     re: /(?<=\b(?:paciente|nombre\s+(?:y\s+)?apellido|apellido\s+(?:y\s+)?nombre|nombre\s+completo|apellido(?:s)?|nombre(?:s)?|titular|solicitante|requirente|interesado|firmante|beneficiario|compareciente|declarante|denunciante|imputado|acusado|causante|heredero|propietario|apoderado|asegurado|afiliado|a\s+nombre\s+de|aclaraci[oó]n|atenci[oó]n|si\s+es\s+a[l]?)\b\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:[ \t]+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){1,5}/gi,
   },
+  // namesPartyList: names in numbered party lists like "(1) Deksia... y (2) Alma Ivette Islas Hernández"
+  // Only matches TitleCase sequences after (N) where followed by legal role indicators
+  namesPartyList: {
+    label: 'Nombre',
+    confidence: 'medium',
+    re: /(?<=\(\d\)\s+)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:[ \t]+(?:de[ \t]+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){1,5}(?=\s*[,\n]|\s+(?:por\s+propio|en\s+su\s+ca[lr][aá]cter|como\s+represent))/gi,
+  },
   namesApostrophe: {
     label: 'Nombre',
     confidence: 'medium',
@@ -255,9 +258,8 @@ const PATTERNS = {
     label: 'Nombre',
     confidence: 'medium',
     // Context-aware: only match TitleCase sequences after legal context phrases.
-    // Includes numbered party listings: (i), (ii), (1), (2), (a), (b)
-    // and connector "y" between names in party lists.
-    re: /(?<=\b(?:representad[ao]?\s+(?:en\s+este\s+acto\s+)?por|por\s+(?:una\s+parte|la\s+otra\s+parte|propio\s+derecho)|en\s+adelante|a\s+favor\s+de|a\s+nombre\s+de|otorgad[ao]\s+por|suscrit[ao]\s+por|firmad[ao]\s+por|apoderad[ao]|notificarse?\s+a|con\s+domicilio|ciudadan[ao]|señor[ae]?s?|atenci[oó]n:?|que\s+celebran:?)\s+|(?:\([ivxlcdm]{1,4}\)|\(\d{1,2}\)|\([a-d]\))\s+)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:[ \t]+(?:de[ \t]+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){1,5}/gi,
+    // Removed (i)/(ii)/(iii) triggers — too many false positives in legal clauses.
+    re: /(?<=\b(?:representad[ao]?\s+(?:en\s+este\s+acto\s+)?por|por\s+(?:una\s+parte|la\s+otra\s+parte|propio\s+derecho)|en\s+adelante|a\s+favor\s+de|a\s+nombre\s+de|otorgad[ao]\s+por|suscrit[ao]\s+por|firmad[ao]\s+por|apoderad[ao]|notificarse?\s+a|con\s+domicilio|ciudadan[ao]|señor[ae]?s?|atenci[oó]n:?|que\s+celebran:?)\s+)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:[ \t]+(?:de[ \t]+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){1,5}/gi,
   },
   namesAllCaps: {
     label: 'Nombre',
@@ -594,6 +596,20 @@ function findMatchPositions(text, options = {}) {
           /^[A-ZÁÉÍÓÚÜÑ]/.test(w) && !NAME_STOPWORDS.has(w.toLowerCase())
         );
         if (!hasProperNoun) continue;
+      }
+      // 8. For address matches: trim at legal clause keywords that indicate
+      //    the address has ended and a new clause begins
+      if (key === 'address' || key === 'addressCtx') {
+        const matched = m[0];
+        const cutPatterns = /,\s*(?:representad|identificad|constituid|sociedad|con\s+(?:NIT|RUT|RFC|C[eé]dula|Rol)|en\s+su\s+ca[lr][aá]cter)/i;
+        const cutMatch = cutPatterns.exec(matched);
+        if (cutMatch) {
+          const trimmedEnd = m.index + cutMatch.index;
+          if (trimmedEnd > m.index + 5) {
+            matches.push({ start: m.index, end: trimmedEnd, label, confidence: confidence || 'medium' });
+            continue;
+          }
+        }
       }
       matches.push({ start: m.index, end: m.index + m[0].length, label, confidence: confidence || 'medium' });
     }
