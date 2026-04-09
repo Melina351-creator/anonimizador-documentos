@@ -190,7 +190,13 @@ const PATTERNS = {
   bankAccount: {
     label: 'Cuenta Bancaria',
     confidence: 'high',
-    re: /(?<=\b(?:n[uú]mero\s+de\s+(?:cuenta|cta)|cuenta(?:\s+(?:bancaria|corriente|de\s+ahorro))?|cta|n[oº°]?\s*(?:de\s+)?cta)\s*[.:\-#Nº°]?\s*)\d[\d\-\s]{6,24}\d\b/gi,
+    re: /(?<=\b(?:n[uú]mero\s+de\s+(?:cuenta|cta)|cuenta(?:\s+(?:bancaria|corriente|de\s+ahorro))?|cta|n[oº°]\.?\s*(?:de\s+)?(?:cuenta|cta))\s*[.:\-#Nº°]?\s*)\d[\d\-\s]{6,24}\d\b/gi,
+  },
+  // clabe: Mexican CLABE (Clave Bancaria Estandarizada) — 18 digits, may have spaces
+  clabe: {
+    label: 'CLABE',
+    confidence: 'high',
+    re: /(?<=\b(?:CLABE|clave\s+bancaria(?:\s+estandarizada)?)\s*(?:\(\s*CLABE\s*\))?\s*[:\-]?\s*)\d[\d\s]{15,22}\d\b/gi,
   },
   // swift: SWIFT/BIC bank codes (8 or 11 alphanumeric chars)
   swift: {
@@ -219,8 +225,9 @@ const PATTERNS = {
     // Two alternatives:
     // 1. Trade-name followed by parenthetical legal entity
     // 2. Standard company: capitalized words + mandatory legal suffix
-    //    Now accepts both "S.A. DE C.V." and "SA DE CV" (without periods)
-    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,2}\s*\(\s*[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.?A\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.?(?:de\s+)?R\.?L\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.A\.S\.?|S\.?R\.?L\.?|S\.?A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)\.?\s*\)|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.?A\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.?(?:de\s+)?R\.?L\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.A\.S\.?|S\.?R\.?L\.?|S\.?A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.)]|$)/gi,
+    //    Accepts comma before suffix: "Deksia México, S.A. de C.V."
+    //    Accepts "SA DE CV" without periods
+    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,2}\s*\(\s*[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}[,]?\s+(?:S\.?A\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.?(?:de\s+)?R\.?L\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.A\.S\.?|S\.?R\.?L\.?|S\.?A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)\.?\s*\)|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}[,]?\s+(?:S\.?A\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.?(?:de\s+)?R\.?L\.?\s+[Dd][Ee]\s+C\.?V\.?|S\.A\.S\.?|S\.?R\.?L\.?|S\.?A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.)]|$)/gi,
   },
   names: {
     label: 'Nombre',
@@ -246,14 +253,15 @@ const PATTERNS = {
   },
   namesTitleCase: {
     label: 'Nombre',
-    confidence: 'low',
+    confidence: 'medium',
     // Context-aware: only match TitleCase sequences after legal context phrases.
-    // Uses [ \t]+ instead of \s+ in name capture to prevent crossing line boundaries.
-    re: /(?<=\b(?:representad[ao]?\s+(?:en\s+este\s+acto\s+)?por|por\s+(?:una\s+parte|la\s+otra\s+parte)|en\s+adelante|a\s+favor\s+de|a\s+nombre\s+de|otorgad[ao]\s+por|suscrit[ao]\s+por|firmad[ao]\s+por|apoderad[ao]|notificarse?\s+a|con\s+domicilio|ciudadan[ao]|señor[ae]?s?|atenci[oó]n:?)\s+)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:[ \t]+(?:de[ \t]+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){1,4}/gi,
+    // Includes numbered party listings: (i), (ii), (1), (2), (a), (b)
+    // and connector "y" between names in party lists.
+    re: /(?<=\b(?:representad[ao]?\s+(?:en\s+este\s+acto\s+)?por|por\s+(?:una\s+parte|la\s+otra\s+parte|propio\s+derecho)|en\s+adelante|a\s+favor\s+de|a\s+nombre\s+de|otorgad[ao]\s+por|suscrit[ao]\s+por|firmad[ao]\s+por|apoderad[ao]|notificarse?\s+a|con\s+domicilio|ciudadan[ao]|señor[ae]?s?|atenci[oó]n:?|que\s+celebran:?)\s+|(?:\([ivxlcdm]{1,4}\)|\(\d{1,2}\)|\([a-d]\))\s+)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:[ \t]+(?:de[ \t]+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){1,5}/gi,
   },
   namesAllCaps: {
     label: 'Nombre',
-    confidence: 'low',
+    confidence: 'medium',
     // Context-aware: only match ALL-CAPS sequences after legal context phrases.
     // Uses \s+ to allow crossing line breaks (common in PDF extraction where
     // "ESTE\nACTO POR FRANCISCO NEFTALI MORALES\nGUERRERO" spans multiple lines).
