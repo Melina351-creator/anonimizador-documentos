@@ -63,12 +63,16 @@ const PATTERNS = {
   passport: {
     label: 'Pasaporte',
     confidence: 'medium',
-    re: /\b[A-Z]{2}[0-9]{6,7}\b/g,
+    // Require "pasaporte" context or a more specific pattern to avoid matching
+    // abbreviations + numbers (e.g. "CP 06500", "No 123456")
+    re: /(?<=\b(?:pasaporte|passport|nro\.?\s*(?:de\s+)?pasaporte)\s*[:\-#Nº°]?\s*)[A-Z]{1,3}[0-9]{6,9}\b|\b[A-Z]{2}[0-9]{7}\b/gi,
   },
   ss: {
     label: 'Nº S.Social',
     confidence: 'high',
-    re: /\b\d{2}[\/ ]\d{8}[\/ ]\d{2}\b|\b\d{12}\b/g,
+    // Require contextual prefix OR specific format with slashes/spaces.
+    // Bare 12-digit numbers are too ambiguous without context.
+    re: /\b(?:seguridad\s+social|n[ºo°]?\s*(?:de\s+)?s\.?\s*s\.?|NSS|NUSS|afiliaci[oó]n)\s*[:\-#Nº°]?\s*\d{2}[\/ ]\d{8}[\/ ]\d{2}\b|\b(?:seguridad\s+social|n[ºo°]?\s*(?:de\s+)?s\.?\s*s\.?|NSS|NUSS|afiliaci[oó]n)\s*[:\-#Nº°]?\s*\d{12}\b|\b\d{2}[\/ ]\d{8}[\/ ]\d{2}\b/gi,
   },
   iban: {
     label: 'IBAN',
@@ -78,7 +82,10 @@ const PATTERNS = {
   phone: {
     label: 'Teléfono',
     confidence: 'high',
-    re: /(?:\+34[\s\-]?)?(?:6|7|8|9)\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b/g,
+    // Contextual: after "tel", "celular", etc. — captures broadly after a phone label
+    // Non-contextual: requires country code prefix (+XX) to avoid matching random numbers
+    // Negative lookahead/lookbehind prevents matching 12+ digit sequences (CUIT, RUT, etc.)
+    re: /(?<=\b(?:tel[eé]fono|tel\.?|celular|cel\.?|m[oó]vil|fax|whatsapp|wsp|contacto)\s*[:\-]?\s*)(?!\d{12,})[\+\d][\d\s\-\(\)\.]{6,16}\d\b|\b\+\d{1,3}[\s\-]?\(?\d{1,4}\)?[\s\-]?\d{3,4}[\s\-]?\d{3,4}\b/g,
   },
   email: {
     label: 'Email',
@@ -86,11 +93,12 @@ const PATTERNS = {
     re: /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g,
   },
   // addressCtx detects the address VALUE after common field labels.
-  // Lookbehind preserves the label ("domicilio: [DIRECCIÓN]" not "[DIRECCIÓN]").
+  // Requires the captured text to contain at least a number (street number, floor, etc.)
+  // to avoid capturing generic text that follows "domicilio" in legal clauses.
   addressCtx: {
     label: 'Dirección',
     confidence: 'medium',
-    re: /(?<=\b(?:domicilio(?:\s+\w+)?|direcci[oó]n(?:\s+\w+)?|residencia|domiciliad[ao](?:\s+en)?)\s*[:\-]?\s*)[^\n;]{3,50}(?:,\s*[^\n;,]{1,30}){0,2}/gi,
+    re: /(?<=\b(?:domicilio(?:\s+(?:social|legal|fiscal|real|especial|constituido))?\s*(?:(?:en|sito\s+en|ubicado\s+en)\s*)?|direcci[oó]n(?:\s+(?:postal|fiscal|legal))?\s*|residencia|domiciliad[ao](?:\s+en)?)\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ][^\n;]{2,40}\d+[^\n;]{0,60}(?:,\s*[^\n;,]{1,40}){0,3}/gi,
   },
   address: {
     label: 'Dirección',
@@ -109,7 +117,9 @@ const PATTERNS = {
   postcode: {
     label: 'Código Postal',
     confidence: 'medium',
-    re: /\b(?:CP\.?[\s:]?)?[0-5][0-9]{4}\b/g,
+    // Require "C.P.", "CP", "código postal", or "cod. postal" prefix to avoid matching
+    // arbitrary 5-digit numbers in legal documents (amounts, article numbers, etc.)
+    re: /\b(?:C\.?\s*P\.?\s*[:\s]?|c[oó]digo\s+postal\s*[:\s]?|cod\.?\s*postal\s*[:\s]?)[0-9]{4,5}\b/gi,
   },
   plate: {
     label: 'Matrícula',
@@ -159,25 +169,29 @@ const PATTERNS = {
   company: {
     label: 'Empresa',
     confidence: 'medium',
-    // Three alternatives:
-    // 1. Organization names beginning with a recognised entity-type keyword
-    //    (Fundación, Instituto, Hospital…) – no mandatory legal suffix.
-    // 2. Trade-name followed by parenthetical legal entity:
+    // Two alternatives (removed the loose org-keyword alternative that caused false positives):
+    // 1. Trade-name followed by parenthetical legal entity:
     //    "ÜMA (Deksia S.A)"  /  "Marca (Razón Social S.R.L.)"
-    //    Handles Unicode first chars (Ü, Á, etc.) and the closing ")".
-    // 3. Standard company: 1-4 capitalized words + mandatory legal suffix.
-    //    Trailing lookahead allows ")" so the suffix inside parens is detected too.
-    re: /\b(?:Fundaci[oó]n|Asociaci[oó]n(?:\s+Civil)?|Instituto|Corporaci[oó]n|Hospital|Cl[ií]nica|Escuela|Centro|Consultorio|Laboratorio(?:s)?|Farmacia(?:s)?)\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}(?:\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,5}|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,2}\s*\(\s*[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)\.?\s*\)|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.)]|$)/gi,
+    // 2. Standard company: 1-4 capitalized words + mandatory legal suffix.
+    //    The legal suffix (S.A., S.R.L., etc.) is REQUIRED — this prevents matching
+    //    generic phrases like "centro de trabajo" or "asociación entre ellas".
+    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,2}\s*\(\s*[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)\.?\s*\)|(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ&]{1,25}(?:\s+(?:(?:y|&|de|del)\s+)?[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,25}){0,3}\s+(?:S\.A\.?\s+de\s+C\.V\.?|S\.de\s+R\.L\.?\s+de\s+C\.V\.?|S\.A\.S\.?|S\.R\.?L\.?|S\.A\.?|S\.C\.S\.?|S\.C\.?|Ltda?\.?|Inc\.?|Corp\.?|GmbH|B\.V\.?|LLC\.?|LLP\.?|PLC\.?|A\.C\.?|Asociaci[oó]n\s+Civil)(?=[\s,;:\n\.)]|$)/gi,
   },
   names: {
     label: 'Nombre',
     confidence: 'high',
-    re: /\b(?:D\.?|D[oañ]\.?|Don|Doña|Sr\.?a?\.?|Dr\.?a?\.?|Lic\.?|Excm[ao]\.?|Ilm[ao]\.?|Prof\.?)\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:\s+(?:de\s+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){0,3}/g,
+    // Require a clear word boundary and the title must be preceded by whitespace or
+    // start of line. The negative lookbehind prevents matching the trailing "d" in words
+    // like "titularidad", "propiedad", "sociedad", etc.
+    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])(?:Don|Doña|Sr\.?a?\.?|Dr\.?a?\.?|Lic\.?|Excm[ao]\.?|Ilm[ao]\.?|Prof\.?)\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:\s+(?:de\s+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){0,3}/g,
   },
   namesCtx: {
     label: 'Nombre',
     confidence: 'high',
-    re: /(?<=\b(?:paciente|nombre\s+(?:y\s+)?apellido|apellido\s+(?:y\s+)?nombre|nombre\s+completo|apellido(?:s)?|nombre(?:s)?|titular|solicitante|requirente|interesado|firmante|beneficiario|compareciente|declarante|denunciante|imputado|acusado|causante|heredero|propietario|apoderado|asegurado|afiliado|a\s+nombre\s+de|aclaraci[oó]n|at)\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){1,4}/gi,
+    // \b after the keyword group ensures the keyword is a complete word, preventing
+    // "titular" from matching inside "titularidad". Uses [ \t]+ in name capture
+    // to prevent crossing line boundaries.
+    re: /(?<=\b(?:paciente|nombre\s+(?:y\s+)?apellido|apellido\s+(?:y\s+)?nombre|nombre\s+completo|apellido(?:s)?|nombre(?:s)?|titular|solicitante|requirente|interesado|firmante|beneficiario|compareciente|declarante|denunciante|imputado|acusado|causante|heredero|propietario|apoderado|asegurado|afiliado|a\s+nombre\s+de|aclaraci[oó]n|atenci[oó]n)\b\s*[:\-]?\s*)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}(?:[ \t]+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{1,20}){1,4}/gi,
   },
   namesApostrophe: {
     label: 'Nombre',
@@ -189,17 +203,16 @@ const PATTERNS = {
   namesTitleCase: {
     label: 'Nombre',
     confidence: 'low',
-    // {1,3} = 1-3 additional words, so minimum 2 words total (e.g. "Francisco Firpo")
-    // Stopword filtering applied in findMatchPositions to reduce false positives.
-    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){1,3}\b/g,
+    // Context-aware: only match TitleCase sequences after legal context phrases.
+    // Uses [ \t]+ instead of \s+ in name capture to prevent crossing line boundaries.
+    re: /(?<=\b(?:representad[ao]?\s+(?:en\s+este\s+acto\s+)?por|por\s+(?:una\s+parte|la\s+otra\s+parte)|en\s+adelante|a\s+favor\s+de|a\s+nombre\s+de|otorgad[ao]\s+por|suscrit[ao]\s+por|firmad[ao]\s+por|apoderad[ao]|notificarse?\s+a|con\s+domicilio|ciudadan[ao]|señor[ae]?s?|atenci[oó]n:?)\s+)[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}(?:[ \t]+(?:de[ \t]+)?[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,19}){1,4}/gi,
   },
   namesAllCaps: {
     label: 'Nombre',
     confidence: 'low',
-    // {1,5} = 1-5 additional words, so 2-6 words total.
-    // Allows long full names and organization names (e.g. "HERNÁN RAMÍREZ GUTIÉRREZ").
-    // Stopword filtering applied in findMatchPositions to reduce false positives.
-    re: /(?<![A-Za-záéíóúüñÁÉÍÓÚÜÑ])[A-ZÁÉÍÓÚÜÑ]{3,20}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,20}){1,5}\b/g,
+    // Context-aware: only match ALL-CAPS sequences after legal context phrases.
+    // Uses [ \t]+ instead of \s+ to prevent crossing line boundaries.
+    re: /(?<=\b(?:representad[ao]?\s+(?:en\s+este\s+acto\s+)?por|en\s+adelante|a\s+favor\s+de|a\s+nombre\s+de|suscrit[ao]\s+por|firmad[ao]\s+por|atenci[oó]n:?)\s+)[A-ZÁÉÍÓÚÜÑ]{3,20}(?:[ \t]+[A-ZÁÉÍÓÚÜÑ]{3,20}){1,5}\b/gi,
   },
 };
 
@@ -288,6 +301,34 @@ const NAME_STOPWORDS = new Set([
   // Common prepositions/conjunctions that land in two-word TitleCase matches
   'con','por','para','sin','sobre','bajo','ante','tras','según','segun',
   'entre','hasta','desde','durante','mediante','excepto','salvo',
+  // Legal/contractual terms commonly appearing in TitleCase or ALL CAPS
+  'cláusula','clausula','obligaciones','derechos','responsabilidad',
+  'responsabilidades','indemnización','indemnizacion','penalidad',
+  'penalidades','jurisdicción','jurisdiccion','competencia','arbitraje',
+  'mediación','mediacion','notificación','notificacion','modificación',
+  'modificacion','cesión','cesion','subcontratación','subcontratacion',
+  'confidencialidad','exclusividad','garantía','garantia',
+  'garantías','garantias','propiedad','intelectual','industrial',
+  'prevención','prevencion','riesgo','riesgos','factores',
+  'psicosocial','psicosociales','violencia','laboral','entorno',
+  'organizacional','favorable','costos','cubiertos','base',
+  'canal','comunicación','comunicacion','slack','notificar',
+  'establecer','difundir','contemplar','promover','promoción','promocion',
+  'política','politica','programa','procedimiento','protocolo',
+  'cumplimiento','incumplimiento','resolución','resolucion',
+  'renovación','renovacion','prórroga','prorroga','extensión','extension',
+  'contraprestación','contraprestacion','facturación','facturacion',
+  'tributario','fiscal','impuesto','impuestos','contribución','contribucion',
+  'registro','único','unico','inscripción','inscripcion',
+  'domicilio','dirección','direccion','ubicación','ubicacion',
+  'oriental','occidental','septentrional','meridional',
+  'prestación','prestacion','servicios','marco','general',
+  'especial','particular','específico','especifico','adicionales',
+  'anexo','apéndice','apendice','sección','seccion','capítulo','capitulo',
+  'titularidad','licencia','transmisión','transmision','otorgamiento',
+  'software','softwares','aplicación','aplicacion','plataforma',
+  'desarrollo','implementación','implementacion','mantenimiento',
+  'soporte','consultoría','consultoria','asesoría','asesoria',
 ].map(w => w.toLowerCase()));
 
 /**
@@ -373,6 +414,54 @@ const QUOTE_SENSITIVE = new Set([
 ]);
 
 /**
+ * Common legal/contractual phrases that should never be treated as person names.
+ * Checked as exact lowercase matches against the full matched text.
+ */
+const LEGAL_PHRASES = new Set([
+  'registro único tributario', 'registro unico tributario',
+  'república oriental', 'republica oriental',
+  'ciudad de méxico', 'ciudad de mexico',
+  'estados unidos mexicanos', 'correo electrónico', 'correo electronico',
+  'propiedad intelectual', 'datos personales', 'razón social', 'razon social',
+  'objeto social', 'representante legal', 'poder especial', 'poder general',
+  'buena fe', 'libre voluntad', 'pleno derecho', 'común acuerdo', 'comun acuerdo',
+  'mutuo acuerdo', 'caso fortuito', 'fuerza mayor', 'daños y perjuicios',
+  'danos y perjuicios', 'acto jurídico', 'acto juridico', 'hecho ilícito',
+  'plazo fijo', 'tiempo determinado', 'tiempo indeterminado',
+  'riesgo psicosocial', 'violencia laboral', 'entorno organizacional',
+  'prestación de servicios', 'prestacion de servicios',
+  'contrato marco', 'marco de prestación', 'marco de prestacion',
+  'política de prevención', 'politica de prevencion',
+  'centro de trabajo', 'riesgos psicosociales',
+  'canal de comunicación', 'canal de comunicacion',
+  'propiedad exclusiva', 'titularidad exclusiva',
+]);
+
+/**
+ * Returns true if the matched text is a known legal/contractual phrase.
+ */
+function _isLegalPhrase(matchedText) {
+  return LEGAL_PHRASES.has(matchedText.toLowerCase().trim());
+}
+
+/**
+ * Returns true if the match is immediately preceded by legal boilerplate context
+ * that indicates the text is part of a clause, not a name.
+ */
+function _isInLegalClause(text, index) {
+  // Look back up to 60 chars for legal clause indicators
+  const lookback = text.slice(Math.max(0, index - 60), index).toLowerCase();
+  const clauseIndicators = [
+    'consisten en', 'contemplen la', 'comprende la', 'incluye la',
+    'así como', 'asi como', 'de acuerdo con', 'conforme a',
+    'en virtud de', 'con base en', 'a efecto de', 'con el fin de',
+    'por concepto de', 'en relación con', 'en relacion con',
+    'derivarse de', 'consistir en', 'referirse a',
+  ];
+  return clauseIndicators.some(ind => lookback.includes(ind));
+}
+
+/**
  * Find PII match positions (start/end indices) in a text string without replacing.
  * Used by the interactive preview and PDF redaction engine.
  * @returns {Array<{start, end, label, confidence, id}>}
@@ -392,8 +481,20 @@ function findMatchPositions(text, options = {}) {
         continue;
       }
       // 2. Suppress name matches that are quoted contract-defined terms
-      //    e.g.  la "EMPRESA"  /  "Las Partes"  /  "Fecha Efectiva"
       if (QUOTE_SENSITIVE.has(key) && _isPrecededByQuote(text, m.index)) {
+        continue;
+      }
+      // 3. Suppress matches that are known legal/contractual phrases
+      if (_isLegalPhrase(m[0])) {
+        continue;
+      }
+      // 4. Suppress name-like matches that appear inside legal clause context
+      if ((key === 'namesTitleCase' || key === 'namesAllCaps') && _isInLegalClause(text, m.index)) {
+        continue;
+      }
+      // 5. Suppress very short matches (2-3 chars) from name patterns — too ambiguous
+      if ((key === 'names' || key === 'namesCtx' || key === 'namesTitleCase' || key === 'namesAllCaps') &&
+          m[0].trim().length < 5) {
         continue;
       }
       matches.push({ start: m.index, end: m.index + m[0].length, label, confidence: confidence || 'medium' });
