@@ -270,6 +270,13 @@ const PATTERNS = {
     // The strict lookbehind context prevents false positives even with \s+.
     re: /(?<=\b(?:representad[ao]?\s+(?:en\s+este\s+acto\s+)?por|(?:ESTE\s+)?ACTO\s+POR|en\s+adelante|a\s+favor\s+de|a\s+nombre\s+de|suscrit[ao]\s+por|firmad[ao]\s+por|atenci[oó]n:?)\s+)[A-ZÁÉÍÓÚÜÑ]{3,20}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,20}){1,5}\b/gi,
   },
+  // namesSignature: names in signature blocks — ALL CAPS names that appear after
+  // a line of underscores/dashes (common pattern: "____\nFRANCISCO JAVIER FIRPO")
+  namesSignature: {
+    label: 'Nombre',
+    confidence: 'medium',
+    re: /(?<=_{3,}[)\s]*\n\s*)[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ.]{1,20}(?:[ \t]+[A-ZÁÉÍÓÚÜÑa-záéíóúüñ.]{1,20}){1,6}/gm,
+  },
 };
 
 /**
@@ -357,6 +364,7 @@ const NAME_STOPWORDS = new Set([
   // Common prepositions/conjunctions that land in two-word TitleCase matches
   'con','por','para','sin','sobre','bajo','ante','tras','según','segun',
   'entre','hasta','desde','durante','mediante','excepto','salvo',
+  'de','del','al','a','en','que','se','no','ni','o','y','e','u',
   // Legal/contractual terms commonly appearing in TitleCase or ALL CAPS
   'cláusula','clausula','obligaciones','derechos','responsabilidad',
   'responsabilidades','indemnización','indemnizacion','penalidad',
@@ -397,6 +405,11 @@ const NAME_STOPWORDS = new Set([
   'carrera','avenida','calle','piso','oficina',
   'bogotá','bogota','montevideo','lima','santiago','quito',
   'caracas','medellín','medellin','barranquilla','cali',
+  // Pronouns/determiners that appear after legal triggers like 'a favor de'
+  'cualquiera','cualquier','alguna','alguno','algunos','algunas',
+  'ninguna','ninguno','ningún','ningun','ambas','ambos',
+  'cada','demás','demas','ellas','ellos','misma','mismo','mismas','mismos',
+  'tercera','tercero','terceras','terceros','aquella','aquellas',
 ].map(w => w.toLowerCase()));
 
 /**
